@@ -24,10 +24,12 @@ import javax.swing.UIManager;
 public class Main {
     private JFrame frame;
     private JTextField regexField;
+    private JTextField testStringField;
     private JPanel visualizationPanel;
     private RegexToDfaConverter converter;
     private DfaVisualizer visualizer;
     private JTextArea statusArea;
+    private DFA currentDfa;
 
     public Main() {
         converter = new RegexToDfaConverter();
@@ -68,6 +70,21 @@ public class Main {
         
         inputPanel.add(regexPanel, BorderLayout.NORTH);
         
+        // Test string panel
+        JPanel testPanel = new JPanel(new BorderLayout());
+        testPanel.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
+        
+        JLabel testLabel = new JLabel("Test String: ");
+        testStringField = new JTextField();
+        JButton testButton = new JButton("Test");
+        testButton.addActionListener(this::testString);
+        
+        testPanel.add(testLabel, BorderLayout.WEST);
+        testPanel.add(testStringField, BorderLayout.CENTER);
+        testPanel.add(testButton, BorderLayout.EAST);
+        
+        inputPanel.add(testPanel, BorderLayout.CENTER);
+        
         // Info panel with supported syntax
         JTextArea syntaxInfo = new JTextArea(
             "Supported Syntax:\n" +
@@ -86,7 +103,7 @@ public class Main {
         
         JScrollPane syntaxScroll = new JScrollPane(syntaxInfo);
         syntaxScroll.setPreferredSize(new Dimension(0, 100));
-        inputPanel.add(syntaxScroll, BorderLayout.CENTER);
+        inputPanel.add(syntaxScroll, BorderLayout.SOUTH);
         
         frame.add(inputPanel, BorderLayout.NORTH);
 
@@ -115,25 +132,116 @@ public class Main {
 
         try {
             statusArea.setText("Converting regex to DFA...");
-            DFA dfa = converter.convertRegexToDfa(regex);
+            currentDfa = converter.convertRegexToDfa(regex);
             
             // Clear the visualization panel
             visualizationPanel.removeAll();
             
             // Add the new visualization
-            JComponent visualization = visualizer.visualizeDfa(dfa);
+            JComponent visualization = visualizer.visualizeDfa(currentDfa);
             visualizationPanel.add(new JScrollPane(visualization), BorderLayout.CENTER);
             
             // Refresh the UI
             visualizationPanel.revalidate();
             visualizationPanel.repaint();
             
-            statusArea.setText("Conversion successful: " + countDfaStats(dfa));
+            statusArea.setText("Conversion successful: " + countDfaStats(currentDfa));
         } catch (Exception ex) {
             statusArea.setText("Error: " + ex.getMessage());
             JOptionPane.showMessageDialog(frame, "Error parsing regex: " + ex.getMessage(), 
                     "Parsing Error", JOptionPane.ERROR_MESSAGE);
         }
+    }
+    
+    private void testString(ActionEvent e) {
+        if (currentDfa == null) {
+            JOptionPane.showMessageDialog(frame, 
+                    "Please create a DFA first by entering a regex and clicking 'Visualize DFA'.", 
+                    "No DFA Available", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        String testStr = testStringField.getText();
+        if (testStr.isEmpty()) {
+            JOptionPane.showMessageDialog(frame, "Please enter a string to test.", 
+                    "Empty Test String", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        boolean accepted = simulateDfa(currentDfa, testStr);
+        String result = "String \"" + testStr + "\": " + (accepted ? "ACCEPTED" : "REJECTED");
+        
+        statusArea.setText(result + "\n" + generateSimulationTrace(currentDfa, testStr));
+        
+        if (accepted) {
+            JOptionPane.showMessageDialog(frame, result, "Test Result", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(frame, result, "Test Result", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+    
+    private boolean simulateDfa(DFA dfa, String input) {
+        DFA.State currentState = dfa.getStartState();
+        
+        for (int i = 0; i < input.length(); i++) {
+            char symbol = input.charAt(i);
+            
+            // Find transition for this symbol
+            DFA.State nextState = dfa.getTransitionTarget(currentState, symbol);
+            
+            if (nextState == null) {
+                // No valid transition found
+                return false;
+            }
+            
+            currentState = nextState;
+        }
+        
+        // Check if we ended in an accept state
+        return dfa.getAcceptStates().contains(currentState);
+    }
+    
+    private String generateSimulationTrace(DFA dfa, String input) {
+        StringBuilder trace = new StringBuilder("Simulation trace:\n");
+        DFA.State currentState = dfa.getStartState();
+        
+        trace.append("Start state: ").append(currentState).append("\n");
+        
+        for (int i = 0; i < input.length(); i++) {
+            char symbol = input.charAt(i);
+            
+            // Find transition for this symbol
+            DFA.State nextState = dfa.getTransitionTarget(currentState, symbol);
+            
+            if (nextState == null) {
+                trace.append("No transition found from state ")
+                     .append(currentState)
+                     .append(" on symbol '")
+                     .append(symbol)
+                     .append("'\n");
+                trace.append("String rejected at position ").append(i);
+                return trace.toString();
+            }
+            
+            trace.append("Transition: ")
+                 .append(currentState)
+                 .append(" --[")
+                 .append(symbol)
+                 .append("]--> ")
+                 .append(nextState)
+                 .append("\n");
+            
+            currentState = nextState;
+        }
+        
+        boolean isAcceptState = dfa.getAcceptStates().contains(currentState);
+        trace.append("Final state: ")
+             .append(currentState)
+             .append(" (")
+             .append(isAcceptState ? "accept" : "non-accept")
+             .append(" state)");
+        
+        return trace.toString();
     }
     
     private void debugRegex(ActionEvent e) {

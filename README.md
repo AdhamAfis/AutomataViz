@@ -6,6 +6,7 @@ A comprehensive Java application that converts regular expressions to minimal De
 
 - Complete and accurate regex to DFA conversion
 - Visualization of DFAs as interactive graphs
+- Test strings against the generated DFA with step-by-step simulation trace
 - Support for all standard regex operations:
   - Basic symbols and character classes
   - Alternation (a|b)
@@ -54,6 +55,11 @@ java -jar target/java-dfa-1.0-SNAPSHOT-jar-with-dependencies.jar
    - Green states: Start states
    - Double-outlined states: Accept states
    - Arrows: Transitions labeled with input symbols
+4. To test strings against the DFA:
+   - Enter a test string in the "Test String" field
+   - Click "Test"
+   - A detailed simulation trace will show you how the DFA processes your string
+   - The result (ACCEPTED/REJECTED) will be displayed
 
 ## Examples
 
@@ -76,6 +82,5 @@ The application can handle complex regular expressions such as:
 
 - Performance optimizations for large regular expressions
 - Support for additional regex features like negated character classes
-- Interactive testing of strings against the generated DFA
 - Step-by-step visualization of the NFA/DFA conversion process
 - Export of DFA as image or SVG 
