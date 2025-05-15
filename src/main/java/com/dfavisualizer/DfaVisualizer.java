@@ -125,7 +125,7 @@ public class DfaVisualizer {
                     edge.setLabel(symbolsLabel);
                     // Store original symbols for possible tooltips or future use
                     edge.setOriginalSymbols(symbolsList);
-                    // Mark if this is a self-loop
+                    // Mark if this is a self-loop (important for visualization)
                     edge.setIsLoop(sourceLabel.equals(targetLabel));
                 }
             }
@@ -362,27 +362,72 @@ public class DfaVisualizer {
             
             // Check if this is a self-loop
             if (sourceVertex == targetVertex) {
-                // Adjust the self-loop to be more clearly visible
+                // For self-loops, use a custom style for very compact visualization
                 graphAdapter.setCellStyles(mxConstants.STYLE_LOOP, "1", new Object[] { edge });
-                graphAdapter.setCellStyles(mxConstants.STYLE_EDGE, "entityRelation", new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_EDGE, "loopEdge", new Object[] { edge }); // Custom style name
                 
-                // Add a larger offset to make the loop more visible
+                // Use minimal geometry for the loop
                 mxGeometry geometry = graphAdapter.getModel().getGeometry(edge);
                 if (geometry != null) {
                     geometry = (mxGeometry) geometry.clone();
-                    geometry.setOffset(new mxPoint(0, -60));
+                    
+                    // Set a very small offset
+                    geometry.setOffset(new mxPoint(5, -5));
+                    
+                    // For a very tight loop
+                    List<mxPoint> points = new ArrayList<>();
+                    points.add(new mxPoint(8, -8));
+                    points.add(new mxPoint(0, -12));
+                    points.add(new mxPoint(-8, -8));
+                    
+                    geometry.setPoints(points);
                     graphAdapter.getModel().setGeometry(edge, geometry);
                 }
                 
-                // Make self-loops more noticeable with a different color and line style
+                // Make loops visually distinct
                 graphAdapter.setCellStyles(mxConstants.STYLE_STROKECOLOR, LOOP_COLOR, new Object[] { edge });
                 graphAdapter.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "2", new Object[] { edge });
                 graphAdapter.setCellStyles(mxConstants.STYLE_FONTCOLOR, LOOP_COLOR, new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_FONTSIZE, "12", new Object[] { edge });
+                
+                // Ensure arrow is visible but small
+                graphAdapter.setCellStyles(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC, new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_ENDSIZE, "5", new Object[] { edge }); // Smaller arrow
+                graphAdapter.setCellStyles(mxConstants.STYLE_ROUNDED, "1", new Object[] { edge });
             } else {
                 // For non-loop edges
                 graphAdapter.setCellStyles(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC, new Object[] { edge });
                 graphAdapter.setCellStyles(mxConstants.STYLE_STROKECOLOR, NORMAL_EDGE_COLOR, new Object[] { edge });
                 graphAdapter.setCellStyles(mxConstants.STYLE_FONTCOLOR, NORMAL_EDGE_COLOR, new Object[] { edge });
+                
+                // Check if there's a reverse edge between the same states
+                boolean hasReverseEdge = false;
+                for (Object otherEdge : edges) {
+                    if (edge != otherEdge) {
+                        Object otherSource = graphAdapter.getModel().getTerminal(otherEdge, true);
+                        Object otherTarget = graphAdapter.getModel().getTerminal(otherEdge, false);
+                        
+                        if (sourceVertex == otherTarget && targetVertex == otherSource) {
+                            hasReverseEdge = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // If there's a reverse edge, use a different style to separate the edges
+                if (hasReverseEdge) {
+                    graphAdapter.setCellStyles(mxConstants.STYLE_EDGE, "orthogonalEdgeStyle", new Object[] { edge });
+                    // Add a slight bend to the edge
+                    mxGeometry geometry = graphAdapter.getModel().getGeometry(edge);
+                    if (geometry != null) {
+                        geometry = (mxGeometry) geometry.clone();
+                        // Create control points for the edge
+                        List<mxPoint> points = new ArrayList<>();
+                        points.add(new mxPoint(20, 20)); // Offset from direct line
+                        geometry.setPoints(points);
+                        graphAdapter.getModel().setGeometry(edge, geometry);
+                    }
+                }
             }
             
             // Make the edge labels more readable
@@ -469,10 +514,33 @@ public class DfaVisualizer {
         loopStyle.put(mxConstants.STYLE_EDGE, "entityRelation");
         loopStyle.put(mxConstants.STYLE_STROKECOLOR, LOOP_COLOR);
         loopStyle.put(mxConstants.STYLE_FONTCOLOR, LOOP_COLOR);
-        loopStyle.put(mxConstants.STYLE_STROKEWIDTH, "2");
+        loopStyle.put(mxConstants.STYLE_STROKEWIDTH, "2.5"); // Make loops more visible
         loopStyle.put(mxConstants.STYLE_LOOP, "1");
+        loopStyle.put(mxConstants.STYLE_FONTSIZE, "14"); // Larger font for loop labels
+        // Explicitly set arrow properties for loops
+        loopStyle.put(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC);
+        loopStyle.put(mxConstants.STYLE_ENDSIZE, "7"); // Slightly larger arrow for visibility
+        loopStyle.put(mxConstants.STYLE_ROUNDED, true);
         
         stylesheet.putCellStyle("LOOP", loopStyle);
+        
+        // Custom style for very tight loops
+        Map<String, Object> tightLoopStyle = new HashMap<>(edgeStyle);
+        tightLoopStyle.put(mxConstants.STYLE_EDGE, "orthogonalEdgeStyle"); // Use orthogonal style for tight bends
+        tightLoopStyle.put(mxConstants.STYLE_STROKECOLOR, LOOP_COLOR);
+        tightLoopStyle.put(mxConstants.STYLE_FONTCOLOR, LOOP_COLOR);
+        tightLoopStyle.put(mxConstants.STYLE_STROKEWIDTH, "2");
+        tightLoopStyle.put(mxConstants.STYLE_LOOP, "1");
+        tightLoopStyle.put(mxConstants.STYLE_FONTSIZE, "12");
+        tightLoopStyle.put(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC);
+        tightLoopStyle.put(mxConstants.STYLE_ENDSIZE, "5");
+        tightLoopStyle.put(mxConstants.STYLE_ROUNDED, "1");
+        tightLoopStyle.put(mxConstants.STYLE_EXIT_X, "0.5"); // Control exit point
+        tightLoopStyle.put(mxConstants.STYLE_EXIT_Y, "0");   // Exit from top
+        tightLoopStyle.put(mxConstants.STYLE_ENTRY_X, "0.5"); // Control entry point
+        tightLoopStyle.put(mxConstants.STYLE_ENTRY_Y, "0");   // Enter from top
+        
+        stylesheet.putCellStyle("loopEdge", tightLoopStyle);
         
         // Apply vertex styles according to state type
         // Get the mapping from vertex names to cells

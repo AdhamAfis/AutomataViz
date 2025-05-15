@@ -57,14 +57,20 @@ public class OptimizedRegexParser {
         }
         
         // Use optimized NFA construction
-        OptimizedNFA optNfa = parseToOptimizedNfa(processedRegex);
-        
-        // Convert OptimizedNFA to conventional NFA for compatibility with SubsetConstruction
-        NFA nfa = optNfa.toConventionalNFA();
-        
-        // Convert NFA to DFA using subset construction
-        SubsetConstruction subsetConstruction = new SubsetConstruction();
-        return subsetConstruction.convertNfaToDfa(nfa);
+        try {
+            OptimizedNFA optNfa = parseToOptimizedNfa(processedRegex);
+            
+            // Convert OptimizedNFA to conventional NFA for compatibility with SubsetConstruction
+            NFA nfa = optNfa.toConventionalNFA();
+            
+            // Convert NFA to DFA using subset construction
+            SubsetConstruction subsetConstruction = new SubsetConstruction();
+            return subsetConstruction.convertNfaToDfa(nfa);
+        } catch (Exception e) {
+            // Print error and rethrow
+            System.err.println("Error parsing regex: " + e.getMessage());
+            throw e;
+        }
     }
     
     /**
@@ -81,7 +87,13 @@ public class OptimizedRegexParser {
         this.regex = preprocessRegex(regex);
         this.position = 0;
         
-        return parseExpression();
+        try {
+            return parseExpression();
+        } catch (Exception e) {
+            // Print error and rethrow
+            System.err.println("Error parsing regex: " + e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -109,80 +121,95 @@ public class OptimizedRegexParser {
      * Parses an expression, which is one or more terms separated by '|'.
      */
     private OptimizedNFA parseExpression() {
-        OptimizedNFA term = parseTerm();
-        
-        while (position < regex.length() && regex.charAt(position) == '|') {
-            position++;  // Skip '|'
-            OptimizedNFA nextTerm = parseTerm();
-            term = term.union(nextTerm);
+        OptimizedNFA term = null;
+        try {
+            term = parseTerm();
+            
+            while (position < regex.length() && regex.charAt(position) == '|') {
+                position++;  // Skip '|'
+                OptimizedNFA nextTerm = parseTerm();
+                term = term.union(nextTerm);
+            }
+            
+            return term;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Error parsing expression at position " + position + ": " + e.getMessage(), e);
         }
-        
-        return term;
     }
     
     /**
      * Parses a term, which is one or more factors that are concatenated.
      */
     private OptimizedNFA parseTerm() {
-        OptimizedNFA factor = parseFactor();
-        
-        while (position < regex.length() &&
-               regex.charAt(position) != '|' &&
-               regex.charAt(position) != ')') {
+        OptimizedNFA factor = null;
+        try {
+            factor = parseFactor();
             
-            OptimizedNFA nextFactor = parseFactor();
-            factor = factor.concatenate(nextFactor);
+            while (position < regex.length() &&
+                   regex.charAt(position) != '|' &&
+                   regex.charAt(position) != ')') {
+                
+                OptimizedNFA nextFactor = parseFactor();
+                factor = factor.concatenate(nextFactor);
+            }
+            
+            return factor;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Error parsing term at position " + position + ": " + e.getMessage(), e);
         }
-        
-        return factor;
     }
     
     /**
      * Parses a factor, which is an atom followed by an optional operator (*, +, ?).
      */
     private OptimizedNFA parseFactor() {
-        OptimizedNFA atom = parseAtom();
-        
-        if (position < regex.length()) {
-            char operator = regex.charAt(position);
+        OptimizedNFA atom = null;
+        try {
+            atom = parseAtom();
             
-            if (operator == '*') {
-                position++;  // Skip '*'
-                atom = atom.kleeneStar();
-            } else if (operator == '+') {
-                position++;  // Skip '+'
+            if (position < regex.length()) {
+                char operator = regex.charAt(position);
                 
-                // a+ = aa*
-                OptimizedNFA copy = atom.concatenate(atom.kleeneStar());
-                atom = copy;
-            } else if (operator == '?') {
-                position++;  // Skip '?'
-                
-                // Create a new start and accept state
-                OptimizedNFA result = new OptimizedNFA();
-                int newStart = result.createState();
-                int newAccept = result.createState();
-                
-                result.setStartState(newStart);
-                result.addAcceptState(newAccept);
-                
-                // Connect new start to atom's start
-                result.addEpsilonTransition(newStart, atom.getStartState());
-                
-                // Connect new start to new accept (empty string case)
-                result.addEpsilonTransition(newStart, newAccept);
-                
-                // Connect atom's accept states to new accept
-                BitSet atomAccepts = atom.getAcceptStates();
-                for (int state = atomAccepts.nextSetBit(0); state >= 0; state = atomAccepts.nextSetBit(state + 1)) {
-                    result.addEpsilonTransition(state, newAccept);
+                if (operator == '*') {
+                    position++;  // Skip '*'
+                    atom = atom.kleeneStar();
+                } else if (operator == '+') {
+                    position++;  // Skip '+'
+                    
+                    // a+ = aa*
+                    OptimizedNFA copy = atom.concatenate(atom.kleeneStar());
+                    atom = copy;
+                } else if (operator == '?') {
+                    position++;  // Skip '?'
+                    
+                    // Create a new NFA for a?
+                    OptimizedNFA result = new OptimizedNFA();
+                    int newStart = result.createState();
+                    int newAccept = result.createState();
+                    
+                    result.setStartState(newStart);
+                    result.addAcceptState(newAccept);
+                    
+                    // Connect new start to atom's start
+                    result.addEpsilonTransition(newStart, atom.getStartState());
+                    
+                    // Connect new start to new accept (empty string case)
+                    result.addEpsilonTransition(newStart, newAccept);
+                    
+                    // Connect atom's accept states to new accept
+                    BitSet atomAccepts = atom.getAcceptStates();
+                    for (int state = atomAccepts.nextSetBit(0); state >= 0; state = atomAccepts.nextSetBit(state + 1)) {
+                        result.addEpsilonTransition(state, newAccept);
+                    }
+                    
+                    atom = result;
                 }
-                
-                atom = result;
             }
+            
+            return atom;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Error parsing factor at position " + position + ": " + e.getMessage(), e);
         }
-        
-        return atom;
     }
     
     /**
@@ -195,138 +222,107 @@ public class OptimizedRegexParser {
         
         char c = regex.charAt(position);
         
-        if (c == '(') {
-            position++;  // Skip '('
-            OptimizedNFA result = parseExpression();
-            
-            if (position < regex.length() && regex.charAt(position) == ')') {
+        try {
+            if (c == '(') {
+                position++;  // Skip '('
+                OptimizedNFA result = parseExpression();
+                
+                if (position >= regex.length() || regex.charAt(position) != ')') {
+                    throw new IllegalArgumentException("Expected ')' at position " + position);
+                }
+                
                 position++;  // Skip ')'
+                return result;
+            } else if (c == '.') {
+                position++;  // Skip '.'
+                return parseDot();
+            } else if (c == '[') {
+                position++; // Skip '['
+                return parseCharacterClass();
             } else {
-                throw new IllegalArgumentException("Missing closing parenthesis");
+                position++;  // Skip the character
+                return OptimizedNFA.forSymbol(c);
             }
-            
-            return result;
-        } else if (c == '.') {
-            // Handle dot (any character)
-            position++;
-            return parseDot();
-        } else if (c == '[') {
-            // Handle character class [...]
-            position++;
-            return parseCharacterClass();
-        } else {
-            // Handle single character
-            position++;
-            return OptimizedNFA.forSymbol(c);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Error parsing atom at position " + position + ": " + e.getMessage(), e);
         }
     }
     
     /**
-     * Parses a dot (any character) by creating an NFA that matches any character.
-     * This uses an optimized approach to avoid creating too many states.
+     * Parses the dot operator (.) which matches any character.
      */
     private OptimizedNFA parseDot() {
         OptimizedNFA result = new OptimizedNFA();
+        int start = result.createState();
+        int accept = result.createState();
         
-        // Create just one start and one accept state
-        int startState = result.createState();
-        int acceptState = result.createState();
+        result.setStartState(start);
+        result.addAcceptState(accept);
         
-        result.setStartState(startState);
-        result.addAcceptState(acceptState);
-        
-        // Add transitions for a limited alphabet
-        // This is more efficient than creating a separate state for each character
-        for (char c = 'a'; c <= 'z'; c++) {
-            result.addTransition(startState, c, acceptState);
-        }
-        for (char c = 'A'; c <= 'Z'; c++) {
-            result.addTransition(startState, c, acceptState);
-        }
-        for (char c = '0'; c <= '9'; c++) {
-            result.addTransition(startState, c, acceptState);
-        }
-        
-        // Add some common special characters
-        char[] specialChars = {'_', '-', '+', '*', '/', '=', '<', '>', '!', '@', '#', '$', '%', '^', '&', ' '};
-        for (char c : specialChars) {
-            result.addTransition(startState, c, acceptState);
+        // Add transitions for all ASCII printable characters
+        for (char c = 32; c < 127; c++) {
+            result.addTransition(start, c, accept);
         }
         
         return result;
     }
     
     /**
-     * Parses a character class [...] by creating an NFA that matches any character
-     * in the class. Uses an optimized approach with fewer states.
+     * Parses a character class [...] into an NFA.
      */
     private OptimizedNFA parseCharacterClass() {
-        // Create an NFA with a single start and accept state
         OptimizedNFA result = new OptimizedNFA();
-        int startState = result.createState();
-        int acceptState = result.createState();
+        int start = result.createState();
+        int accept = result.createState();
         
-        result.setStartState(startState);
-        result.addAcceptState(acceptState);
+        result.setStartState(start);
+        result.addAcceptState(accept);
         
-        boolean negate = false;
-        
-        // Check for negation
+        boolean isNegated = false;
         if (position < regex.length() && regex.charAt(position) == '^') {
-            negate = true;
-            position++;
+            isNegated = true;
+            position++; // Skip '^'
         }
         
-        // Build the set of characters in this class
-        Set<Character> charSet = new HashSet<>();
+        Set<Character> includedChars = new HashSet<>();
         
-        // Parse characters in the class
+        // Parse the character class content
         while (position < regex.length() && regex.charAt(position) != ']') {
-            char c = regex.charAt(position++);
+            char current = regex.charAt(position++);
             
-            // Handle ranges like a-z
+            // Handle character range (e.g., a-z)
             if (position + 1 < regex.length() && regex.charAt(position) == '-' && regex.charAt(position + 1) != ']') {
-                position++;  // Skip '-'
+                position++; // Skip '-'
                 char end = regex.charAt(position++);
                 
                 // Add all characters in the range
-                for (char rangeChar = c; rangeChar <= end; rangeChar++) {
-                    charSet.add(rangeChar);
+                for (char c = current; c <= end; c++) {
+                    includedChars.add(c);
                 }
             } else {
                 // Add single character
-                charSet.add(c);
+                includedChars.add(current);
             }
         }
         
-        // Skip closing ']'
-        if (position < regex.length() && regex.charAt(position) == ']') {
-            position++;
+        if (position >= regex.length() || regex.charAt(position) != ']') {
+            throw new IllegalArgumentException("Expected ']' at position " + position);
+        }
+        
+        position++; // Skip ']'
+        
+        if (isNegated) {
+            // For negated character class, add transitions for all characters not in the class
+            for (char c = 32; c < 127; c++) {
+                if (!includedChars.contains(c)) {
+                    result.addTransition(start, c, accept);
+                }
+            }
         } else {
-            throw new IllegalArgumentException("Missing closing bracket in character class");
-        }
-        
-        // If negated, invert the character set
-        if (negate) {
-            Set<Character> allChars = new HashSet<>();
-            
-            // Add standard alphabet characters
-            for (char ch = 'a'; ch <= 'z'; ch++) allChars.add(ch);
-            for (char ch = 'A'; ch <= 'Z'; ch++) allChars.add(ch);
-            for (char ch = '0'; ch <= '9'; ch++) allChars.add(ch);
-            
-            // Add common special characters
-            char[] specialChars = {'_', '-', '+', '*', '/', '=', '<', '>', '!', '@', '#', '$', '%', '^', '&', ' '};
-            for (char ch : specialChars) allChars.add(ch);
-            
-            // Remove characters in the class
-            allChars.removeAll(charSet);
-            charSet = allChars;
-        }
-        
-        // Add transitions for all characters in the set
-        for (char c : charSet) {
-            result.addTransition(startState, c, acceptState);
+            // For normal character class, add transitions for all characters in the class
+            for (char c : includedChars) {
+                result.addTransition(start, c, accept);
+            }
         }
         
         return result;

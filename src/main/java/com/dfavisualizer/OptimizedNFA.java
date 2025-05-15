@@ -66,14 +66,23 @@ public class OptimizedNFA {
      */
     public static OptimizedNFA forSymbol(char symbol) {
         OptimizedNFA nfa = new OptimizedNFA();
-        int start = nfa.createState();
-        int end = nfa.createState();
-        
-        nfa.setStartState(start);
-        nfa.addAcceptState(end);
-        nfa.addTransition(start, symbol, end);
-        
-        return nfa;
+        try {
+            int start = nfa.createState();
+            int end = nfa.createState();
+            
+            nfa.setStartState(start);
+            nfa.addAcceptState(end);
+            nfa.addTransition(start, symbol, end);
+            
+            return nfa;
+        } catch (Exception e) {
+            System.err.println("Error creating NFA for symbol '" + symbol + "': " + e.getMessage());
+            // Create a minimal valid NFA as fallback
+            int start = nfa.createState();
+            nfa.setStartState(start);
+            nfa.addAcceptState(start); // Same state is both start and accept
+            return nfa;
+        }
     }
     
     /**
@@ -81,14 +90,23 @@ public class OptimizedNFA {
      */
     public static OptimizedNFA forEpsilon() {
         OptimizedNFA nfa = new OptimizedNFA();
-        int start = nfa.createState();
-        int end = nfa.createState();
-        
-        nfa.setStartState(start);
-        nfa.addAcceptState(end);
-        nfa.addEpsilonTransition(start, end);
-        
-        return nfa;
+        try {
+            int start = nfa.createState();
+            int end = nfa.createState();
+            
+            nfa.setStartState(start);
+            nfa.addAcceptState(end);
+            nfa.addEpsilonTransition(start, end);
+            
+            return nfa;
+        } catch (Exception e) {
+            System.err.println("Error creating NFA for epsilon: " + e.getMessage());
+            // Create a minimal valid NFA as fallback
+            int start = nfa.createState();
+            nfa.setStartState(start);
+            nfa.addAcceptState(start); // Same state is both start and accept
+            return nfa;
+        }
     }
     
     /**
@@ -144,43 +162,59 @@ public class OptimizedNFA {
      * Adds a transition from one state to another on a given symbol.
      */
     public void addTransition(int fromState, char symbol, int toState) {
-        if (!states.get(fromState) || !states.get(toState)) {
-            throw new IllegalArgumentException("One or both states do not exist");
+        try {
+            if (!states.get(fromState) || !states.get(toState)) {
+                throw new IllegalArgumentException("One or both states do not exist: fromState=" + fromState + ", toState=" + toState);
+            }
+            
+            // Add to alphabet (except epsilon)
+            if (symbol != EPSILON) {
+                alphabet.add(symbol);
+            }
+            
+            // Add the transition
+            if (symbol == EPSILON) {
+                // For epsilon transitions, use the specialized storage
+                addEpsilonTransition(fromState, toState);
+            } else {
+                // For symbol transitions, use the map-based storage
+                Map<Character, BitSet> stateTransitions = transitions.get(fromState);
+                BitSet targetStates = stateTransitions.computeIfAbsent(symbol, k -> new BitSet(MAX_STATES));
+                targetStates.set(toState);
+            }
+            
+            // Clear cached epsilon closures since transitions changed
+            cachedEpsilonClosures.clear();
+        } catch (IndexOutOfBoundsException e) {
+            throw new IllegalArgumentException("State index out of bounds: fromState=" + fromState + ", toState=" + toState + 
+                ". Maximum state index allowed is " + (MAX_STATES - 1), e);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Error adding transition from state " + fromState + 
+                " to state " + toState + " on symbol '" + symbol + "': " + e.getMessage(), e);
         }
-        
-        // Add to alphabet (except epsilon)
-        if (symbol != EPSILON) {
-            alphabet.add(symbol);
-        }
-        
-        // Add the transition
-        if (symbol == EPSILON) {
-            // For epsilon transitions, use the specialized storage
-            addEpsilonTransition(fromState, toState);
-        } else {
-            // For symbol transitions, use the map-based storage
-            Map<Character, BitSet> stateTransitions = transitions.get(fromState);
-            BitSet targetStates = stateTransitions.computeIfAbsent(symbol, k -> new BitSet(MAX_STATES));
-            targetStates.set(toState);
-        }
-        
-        // Clear cached epsilon closures since transitions changed
-        cachedEpsilonClosures.clear();
     }
     
     /**
      * Adds an epsilon transition from one state to another.
      */
     public void addEpsilonTransition(int fromState, int toState) {
-        if (!states.get(fromState) || !states.get(toState)) {
-            throw new IllegalArgumentException("One or both states do not exist");
+        try {
+            if (!states.get(fromState) || !states.get(toState)) {
+                throw new IllegalArgumentException("One or both states do not exist: fromState=" + fromState + ", toState=" + toState);
+            }
+            
+            // Add the epsilon transition
+            epsilonTransitions.get(fromState).set(toState);
+            
+            // Clear cached epsilon closures since transitions changed
+            cachedEpsilonClosures.clear();
+        } catch (IndexOutOfBoundsException e) {
+            throw new IllegalArgumentException("State index out of bounds: fromState=" + fromState + ", toState=" + toState + 
+                ". Maximum state index allowed is " + (MAX_STATES - 1), e);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Error adding epsilon transition from state " + fromState + 
+                " to state " + toState + ": " + e.getMessage(), e);
         }
-        
-        // Add the epsilon transition
-        epsilonTransitions.get(fromState).set(toState);
-        
-        // Clear cached epsilon closures since transitions changed
-        cachedEpsilonClosures.clear();
     }
     
     /**
@@ -252,81 +286,77 @@ public class OptimizedNFA {
             return this;
         }
         
-        // Compute max state ID to avoid conflicts
-        int maxState = Math.max(this.nextStateId, other.nextStateId);
-        int offset = maxState;
-        
+        // Create a new NFA for the result
         OptimizedNFA result = new OptimizedNFA();
         
-        // Copy states from this NFA
+        // First, create all the states needed
+        Map<Integer, Integer> thisStateMap = new HashMap<>();
+        Map<Integer, Integer> otherStateMap = new HashMap<>();
+        
+        // Map states from this NFA
         for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
-            result.states.set(state);
-            
-            // Copy accept states
-            if (acceptStates.get(state)) {
-                // Accept states from this NFA become regular states
-                // We'll connect them to the other NFA's start state
-            }
-            
-            // Copy transitions
+            int newState = result.createState();
+            thisStateMap.put(state, newState);
+        }
+        
+        // Map states from other NFA
+        for (int state = other.states.nextSetBit(0); state >= 0; state = other.states.nextSetBit(state + 1)) {
+            int newState = result.createState();
+            otherStateMap.put(state, newState);
+        }
+        
+        // Set start state from this NFA
+        result.setStartState(thisStateMap.get(this.startState));
+        
+        // Set accept states from other NFA
+        for (int state = other.acceptStates.nextSetBit(0); state >= 0; state = other.acceptStates.nextSetBit(state + 1)) {
+            result.addAcceptState(otherStateMap.get(state));
+        }
+        
+        // Copy transitions from this NFA
+        for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
+            // Copy symbol transitions
             Map<Character, BitSet> stateTransitions = transitions.get(state);
             for (Map.Entry<Character, BitSet> entry : stateTransitions.entrySet()) {
                 char symbol = entry.getKey();
                 BitSet targets = entry.getValue();
                 
-                result.alphabet.add(symbol);
-                
                 for (int target = targets.nextSetBit(0); target >= 0; target = targets.nextSetBit(target + 1)) {
-                    result.addTransition(state, symbol, target);
+                    result.addTransition(thisStateMap.get(state), symbol, thisStateMap.get(target));
                 }
             }
             
             // Copy epsilon transitions
             BitSet epsilonTargets = epsilonTransitions.get(state);
             for (int target = epsilonTargets.nextSetBit(0); target >= 0; target = epsilonTargets.nextSetBit(target + 1)) {
-                result.addEpsilonTransition(state, target);
+                result.addEpsilonTransition(thisStateMap.get(state), thisStateMap.get(target));
             }
         }
         
-        // Copy states from other NFA with offset
+        // Copy transitions from other NFA
         for (int state = other.states.nextSetBit(0); state >= 0; state = other.states.nextSetBit(state + 1)) {
-            int newState = state + offset;
-            result.states.set(newState);
-            
-            // Copy accept states
-            if (other.acceptStates.get(state)) {
-                result.addAcceptState(newState);
-            }
-            
-            // Copy transitions
+            // Copy symbol transitions
             Map<Character, BitSet> stateTransitions = other.transitions.get(state);
             for (Map.Entry<Character, BitSet> entry : stateTransitions.entrySet()) {
                 char symbol = entry.getKey();
                 BitSet targets = entry.getValue();
                 
-                result.alphabet.add(symbol);
-                
                 for (int target = targets.nextSetBit(0); target >= 0; target = targets.nextSetBit(target + 1)) {
-                    result.addTransition(newState, symbol, target + offset);
+                    result.addTransition(otherStateMap.get(state), symbol, otherStateMap.get(target));
                 }
             }
             
             // Copy epsilon transitions
             BitSet epsilonTargets = other.epsilonTransitions.get(state);
             for (int target = epsilonTargets.nextSetBit(0); target >= 0; target = epsilonTargets.nextSetBit(target + 1)) {
-                result.addEpsilonTransition(newState, target + offset);
+                result.addEpsilonTransition(otherStateMap.get(state), otherStateMap.get(target));
             }
         }
         
-        // Set start state
-        result.setStartState(this.startState);
-        
         // Connect accept states of this NFA to start state of other NFA
         for (int state = this.acceptStates.nextSetBit(0); state >= 0; state = this.acceptStates.nextSetBit(state + 1)) {
-            result.addEpsilonTransition(state, other.startState + offset);
+            result.addEpsilonTransition(thisStateMap.get(state), otherStateMap.get(other.startState));
         }
-        
-        result.nextStateId = Math.max(this.nextStateId, other.nextStateId + offset);
         
         return result;
     }
@@ -340,10 +370,7 @@ public class OptimizedNFA {
             return this;
         }
         
-        // Compute max state ID to avoid conflicts
-        int maxState = Math.max(this.nextStateId, other.nextStateId);
-        int offset = maxState;
-        
+        // Create a new NFA for the result
         OptimizedNFA result = new OptimizedNFA();
         
         // Create new start and accept states
@@ -353,69 +380,74 @@ public class OptimizedNFA {
         result.setStartState(newStart);
         result.addAcceptState(newAccept);
         
-        // Copy states from this NFA
+        // Create state mappings
+        Map<Integer, Integer> thisStateMap = new HashMap<>();
+        Map<Integer, Integer> otherStateMap = new HashMap<>();
+        
+        // Map states from this NFA
         for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
-            result.states.set(state);
-            
-            // Copy transitions
+            int newState = result.createState();
+            thisStateMap.put(state, newState);
+        }
+        
+        // Map states from other NFA
+        for (int state = other.states.nextSetBit(0); state >= 0; state = other.states.nextSetBit(state + 1)) {
+            int newState = result.createState();
+            otherStateMap.put(state, newState);
+        }
+        
+        // Copy transitions from this NFA
+        for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
+            // Copy symbol transitions
             Map<Character, BitSet> stateTransitions = transitions.get(state);
             for (Map.Entry<Character, BitSet> entry : stateTransitions.entrySet()) {
                 char symbol = entry.getKey();
                 BitSet targets = entry.getValue();
                 
-                result.alphabet.add(symbol);
-                
                 for (int target = targets.nextSetBit(0); target >= 0; target = targets.nextSetBit(target + 1)) {
-                    result.addTransition(state, symbol, target);
+                    result.addTransition(thisStateMap.get(state), symbol, thisStateMap.get(target));
                 }
             }
             
             // Copy epsilon transitions
             BitSet epsilonTargets = epsilonTransitions.get(state);
             for (int target = epsilonTargets.nextSetBit(0); target >= 0; target = epsilonTargets.nextSetBit(target + 1)) {
-                result.addEpsilonTransition(state, target);
+                result.addEpsilonTransition(thisStateMap.get(state), thisStateMap.get(target));
             }
         }
         
-        // Copy states from other NFA with offset
+        // Copy transitions from other NFA
         for (int state = other.states.nextSetBit(0); state >= 0; state = other.states.nextSetBit(state + 1)) {
-            int newState = state + offset;
-            result.states.set(newState);
-            
-            // Copy transitions
+            // Copy symbol transitions
             Map<Character, BitSet> stateTransitions = other.transitions.get(state);
             for (Map.Entry<Character, BitSet> entry : stateTransitions.entrySet()) {
                 char symbol = entry.getKey();
                 BitSet targets = entry.getValue();
                 
-                result.alphabet.add(symbol);
-                
                 for (int target = targets.nextSetBit(0); target >= 0; target = targets.nextSetBit(target + 1)) {
-                    result.addTransition(newState, symbol, target + offset);
+                    result.addTransition(otherStateMap.get(state), symbol, otherStateMap.get(target));
                 }
             }
             
             // Copy epsilon transitions
             BitSet epsilonTargets = other.epsilonTransitions.get(state);
             for (int target = epsilonTargets.nextSetBit(0); target >= 0; target = epsilonTargets.nextSetBit(target + 1)) {
-                result.addEpsilonTransition(newState, target + offset);
+                result.addEpsilonTransition(otherStateMap.get(state), otherStateMap.get(target));
             }
         }
         
         // Connect new start state to start states of both NFAs
-        result.addEpsilonTransition(newStart, this.startState);
-        result.addEpsilonTransition(newStart, other.startState + offset);
+        result.addEpsilonTransition(newStart, thisStateMap.get(this.startState));
+        result.addEpsilonTransition(newStart, otherStateMap.get(other.startState));
         
         // Connect accept states of both NFAs to new accept state
         for (int state = this.acceptStates.nextSetBit(0); state >= 0; state = this.acceptStates.nextSetBit(state + 1)) {
-            result.addEpsilonTransition(state, newAccept);
+            result.addEpsilonTransition(thisStateMap.get(state), newAccept);
         }
         
         for (int state = other.acceptStates.nextSetBit(0); state >= 0; state = other.acceptStates.nextSetBit(state + 1)) {
-            result.addEpsilonTransition(state + offset, newAccept);
+            result.addEpsilonTransition(otherStateMap.get(state), newAccept);
         }
-        
-        result.nextStateId = Math.max(result.nextStateId, Math.max(this.nextStateId, other.nextStateId + offset));
         
         return result;
     }
@@ -434,44 +466,49 @@ public class OptimizedNFA {
         result.setStartState(newStart);
         result.addAcceptState(newAccept);
         
-        // Copy states from this NFA
+        // Create state mapping
+        Map<Integer, Integer> stateMap = new HashMap<>();
+        
+        // Map states from this NFA
         for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
-            result.states.set(state);
-            
-            // Copy transitions
+            int newState = result.createState();
+            stateMap.put(state, newState);
+        }
+        
+        // Copy transitions from this NFA
+        for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
+            // Copy symbol transitions
             Map<Character, BitSet> stateTransitions = transitions.get(state);
             for (Map.Entry<Character, BitSet> entry : stateTransitions.entrySet()) {
                 char symbol = entry.getKey();
                 BitSet targets = entry.getValue();
                 
-                result.alphabet.add(symbol);
-                
                 for (int target = targets.nextSetBit(0); target >= 0; target = targets.nextSetBit(target + 1)) {
-                    result.addTransition(state, symbol, target);
+                    result.addTransition(stateMap.get(state), symbol, stateMap.get(target));
                 }
             }
             
             // Copy epsilon transitions
             BitSet epsilonTargets = epsilonTransitions.get(state);
             for (int target = epsilonTargets.nextSetBit(0); target >= 0; target = epsilonTargets.nextSetBit(target + 1)) {
-                result.addEpsilonTransition(state, target);
+                result.addEpsilonTransition(stateMap.get(state), stateMap.get(target));
             }
         }
         
         // Connect new start state to start state of this NFA
-        result.addEpsilonTransition(newStart, this.startState);
+        result.addEpsilonTransition(newStart, stateMap.get(this.startState));
         
         // Connect new start state to new accept state (empty string case)
         result.addEpsilonTransition(newStart, newAccept);
         
         // Connect accept states of this NFA to new accept state
         for (int state = this.acceptStates.nextSetBit(0); state >= 0; state = this.acceptStates.nextSetBit(state + 1)) {
-            result.addEpsilonTransition(state, newAccept);
+            result.addEpsilonTransition(stateMap.get(state), newAccept);
         }
         
         // Connect accept states of this NFA back to start state for repetition
         for (int state = this.acceptStates.nextSetBit(0); state >= 0; state = this.acceptStates.nextSetBit(state + 1)) {
-            result.addEpsilonTransition(state, this.startState);
+            result.addEpsilonTransition(stateMap.get(state), stateMap.get(this.startState));
         }
         
         return result;
@@ -512,39 +549,57 @@ public class OptimizedNFA {
     public NFA toConventionalNFA() {
         NFA nfa = new NFA();
         
-        // Create states
-        for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
-            while (nfa.getStates().size() <= state) {
+        try {
+            // Create states with proper indexing
+            int maxState = states.length();
+            for (int i = 0; i < maxState; i++) {
                 nfa.createState();
             }
-        }
-        
-        // Set start state
-        nfa.setStartState(startState);
-        
-        // Set accept states
-        for (int state = acceptStates.nextSetBit(0); state >= 0; state = acceptStates.nextSetBit(state + 1)) {
-            nfa.addAcceptState(state);
-        }
-        
-        // Add transitions
-        for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
-            // Add symbol transitions
-            Map<Character, BitSet> stateTransitions = transitions.get(state);
-            for (Map.Entry<Character, BitSet> entry : stateTransitions.entrySet()) {
-                char symbol = entry.getKey();
-                BitSet targets = entry.getValue();
-                
-                for (int target = targets.nextSetBit(0); target >= 0; target = targets.nextSetBit(target + 1)) {
-                    nfa.addTransition(state, symbol, target);
+            
+            // Set start state
+            nfa.setStartState(startState);
+            
+            // Set accept states
+            for (int state = acceptStates.nextSetBit(0); state >= 0; state = acceptStates.nextSetBit(state + 1)) {
+                try {
+                    nfa.addAcceptState(state);
+                } catch (Exception e) {
+                    System.err.println("Warning: Could not add accept state " + state + ": " + e.getMessage());
                 }
             }
             
-            // Add epsilon transitions
-            BitSet epsilonTargets = epsilonTransitions.get(state);
-            for (int target = epsilonTargets.nextSetBit(0); target >= 0; target = epsilonTargets.nextSetBit(target + 1)) {
-                nfa.addTransition(state, EPSILON, target);
+            // Add transitions
+            for (int state = states.nextSetBit(0); state >= 0; state = states.nextSetBit(state + 1)) {
+                // Add symbol transitions
+                Map<Character, BitSet> stateTransitions = transitions.get(state);
+                for (Map.Entry<Character, BitSet> entry : stateTransitions.entrySet()) {
+                    char symbol = entry.getKey();
+                    BitSet targets = entry.getValue();
+                    
+                    for (int target = targets.nextSetBit(0); target >= 0; target = targets.nextSetBit(target + 1)) {
+                        try {
+                            nfa.addTransition(state, symbol, target);
+                        } catch (Exception e) {
+                            System.err.println("Warning: Could not add transition from " + state + 
+                                " to " + target + " on symbol '" + symbol + "': " + e.getMessage());
+                        }
+                    }
+                }
+                
+                // Add epsilon transitions
+                BitSet epsilonTargets = epsilonTransitions.get(state);
+                for (int target = epsilonTargets.nextSetBit(0); target >= 0; target = epsilonTargets.nextSetBit(target + 1)) {
+                    try {
+                        nfa.addTransition(state, EPSILON, target);
+                    } catch (Exception e) {
+                        System.err.println("Warning: Could not add epsilon transition from " + state + 
+                            " to " + target + ": " + e.getMessage());
+                    }
+                }
             }
+        } catch (Exception e) {
+            System.err.println("Error converting OptimizedNFA to conventional NFA: " + e.getMessage());
+            e.printStackTrace();
         }
         
         return nfa;

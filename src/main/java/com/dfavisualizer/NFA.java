@@ -339,20 +339,28 @@ public class NFA {
      * Adds a transition from one state to another on a given symbol.
      */
     public void addTransition(int fromState, char symbol, int toState) {
-        if (!states.contains(fromState)) {
-            throw new IllegalArgumentException("Source state " + fromState + " does not exist in the NFA");
+        try {
+            if (!states.contains(fromState)) {
+                throw new IllegalArgumentException("Source state " + fromState + " does not exist in the NFA");
+            }
+            
+            if (!states.contains(toState)) {
+                throw new IllegalArgumentException("Target state " + toState + " does not exist in the NFA");
+            }
+            
+            if (symbol != EPSILON) {
+                alphabet.add(symbol);
+            }
+            
+            NFATransition transition = new NFATransition(fromState, symbol);
+            transitions.computeIfAbsent(transition, k -> new HashSet<>()).add(toState);
+        } catch (IllegalArgumentException e) {
+            throw e; // Rethrow the original exception
+        } catch (Exception e) {
+            throw new IllegalArgumentException(
+                "Error adding transition from state " + fromState + 
+                " to state " + toState + " on symbol '" + symbol + "': " + e.getMessage(), e);
         }
-        
-        if (!states.contains(toState)) {
-            throw new IllegalArgumentException("Target state " + toState + " does not exist in the NFA");
-        }
-        
-        if (symbol != EPSILON) {
-            alphabet.add(symbol);
-        }
-        
-        NFATransition transition = new NFATransition(fromState, symbol);
-        transitions.computeIfAbsent(transition, k -> new HashSet<>()).add(toState);
     }
 
     /**
