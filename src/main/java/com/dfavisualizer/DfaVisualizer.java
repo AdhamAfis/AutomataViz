@@ -46,6 +46,8 @@ public class DfaVisualizer {
     private static final String NORMAL_EDGE_COLOR = "#666666"; // Dark gray for normal edges
     private static final String SPECIAL_EDGE_COLOR = "#FF6666"; // Red for special transitions
     private static final String DEAD_STATE_BORDER_COLOR = "#AA0000"; // Dark red for dead state borders
+    private static final String LOOP_BADGE_FILL = "#CCCCFF"; // Light blue for loop badges
+    private static final String LOOP_BADGE_BORDER = "#6666FF"; // Blue for loop badge border
     
     // For transition grouping
     private static final int MAX_DISPLAY_SYMBOLS = 12;
@@ -147,6 +149,9 @@ public class DfaVisualizer {
         // Adjust the graph for better visualization
         adjustEdgeLabels(graphAdapter);
         
+        // Convert self-loops to badges
+        addLoopBadgesToStates(graphAdapter, dfa);
+        
         // Create a component with the visualization
         mxGraphComponent graphComponent = createGraphComponent(graphAdapter, dfa);
         
@@ -246,9 +251,19 @@ public class DfaVisualizer {
         graphComponent.getGraph().setAllowDanglingEdges(false);
         graphComponent.getGraph().setEdgeLabelsMovable(false);
         graphComponent.getGraph().setCellsEditable(false);
-        graphComponent.getGraph().setCellsLocked(true);
+        
+        // Enable cells to be movable and selectable for better interaction
+        graphComponent.getGraph().setCellsLocked(false);
+        graphComponent.getGraph().setCellsMovable(true);
+        graphComponent.getGraph().setCellsSelectable(true);
         graphComponent.getGraph().setCellsResizable(false);
-        graphComponent.getGraph().setCellsSelectable(false);
+        
+        // Improve drag behavior
+        graphComponent.setPanning(true);
+        graphComponent.setAutoScroll(true);
+        graphComponent.setCenterPage(true);
+        graphComponent.setCenterZoom(true);
+        
         graphComponent.setToolTips(true);
         graphComponent.setBorder(null);
         graphComponent.getViewport().setOpaque(true);
@@ -257,6 +272,9 @@ public class DfaVisualizer {
         // Enable antialiasing for smoother graphics
         graphComponent.setAntiAlias(true);
         graphComponent.setTextAntiAlias(true);
+        
+        // Make the component capture key events for shortcuts
+        graphComponent.setFocusable(true);
         
         // Add tooltips for states
         addStateTooltips(graphComponent, dfa);
@@ -293,7 +311,7 @@ public class DfaVisualizer {
         }
         
         tooltip.append("Total States: ").append(dfa.getStates().size()).append("<br>");
-        tooltip.append("Blue edges represent self-loops<br>");
+        tooltip.append("↻ badges above states represent self-loops<br>");
         tooltip.append("Grey edges represent normal transitions<br>");
         
         // Only mention dead states in the tooltip if highlighting is enabled
@@ -362,44 +380,55 @@ public class DfaVisualizer {
             
             // Check if this is a self-loop
             if (sourceVertex == targetVertex) {
-                // For self-loops, create a circular loop above the state
-                graphAdapter.setCellStyles(mxConstants.STYLE_LOOP, "1", new Object[] { edge });
-                // Use a simpler edge style for better control
-                graphAdapter.setCellStyles(mxConstants.STYLE_EDGE, "orthogonalEdgeStyle", new Object[] { edge });
+                // For self-loops, create a minimal curved arrow that sticks closely to the state
+                graphAdapter.setCellStyles(mxConstants.STYLE_NOLABEL, "0", new Object[] { edge }); // Enable label
                 
-                // Create a circular loop geometry
+                // Position the small loop at the top-right corner of the state
+                mxGeometry stateGeometry = graphAdapter.getCellGeometry(sourceVertex);
                 mxGeometry geometry = graphAdapter.getModel().getGeometry(edge);
+                
                 if (geometry != null) {
                     geometry = (mxGeometry) geometry.clone();
                     
-                    // Position the loop at the top of the state
-                    geometry.setOffset(new mxPoint(0, -20));
+                    // Calculate edge attachment points
+                    double stateRadius = STATE_SIZE / 2.0;
+                    double angleStart = Math.PI / 4; // 45 degrees - top-right
+                    double angleEnd = 0; // 0 degrees - right side
                     
-                    // Control points to make a circular loop
+                    // Offset from the edge of the state
+                    geometry.setOffset(new mxPoint(5, -5));
+                    
+                    // Create a minimal curved arrow
                     List<mxPoint> points = new ArrayList<>();
-                    // Create a wider, more circular arc
-                    points.add(new mxPoint(-25, -25));  // Left point
-                    points.add(new mxPoint(0, -40));    // Top point
-                    points.add(new mxPoint(25, -25));   // Right point
+                    // Create a very tight arc - almost like a decoration on the state
+                    points.add(new mxPoint(stateRadius * Math.cos(angleStart), stateRadius * Math.sin(angleStart) - 5));
+                    points.add(new mxPoint(stateRadius * Math.cos(angleStart) + 5, stateRadius * Math.sin(angleStart) - 10));
+                    points.add(new mxPoint(stateRadius * Math.cos(angleEnd) + 5, stateRadius * Math.sin(angleEnd)));
                     
                     geometry.setPoints(points);
                     graphAdapter.getModel().setGeometry(edge, geometry);
                 }
                 
-                // Styling the loop
+                // Apply special styling for the loop
+                graphAdapter.setCellStyles(mxConstants.STYLE_EDGE, "orthogonalEdgeStyle", new Object[] { edge });
+                // Using built-in rounded instead of unsupported curved property
+                graphAdapter.setCellStyles(mxConstants.STYLE_ROUNDED, "1", new Object[] { edge });
                 graphAdapter.setCellStyles(mxConstants.STYLE_STROKECOLOR, LOOP_COLOR, new Object[] { edge });
-                graphAdapter.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "2.5", new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "2", new Object[] { edge });
                 graphAdapter.setCellStyles(mxConstants.STYLE_FONTCOLOR, LOOP_COLOR, new Object[] { edge });
-                graphAdapter.setCellStyles(mxConstants.STYLE_FONTSIZE, "12", new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_FONTSIZE, "10", new Object[] { edge }); // Smaller font
                 
-                // Arrow styling - make it point downward toward the state
+                // Make arrow small but visible
                 graphAdapter.setCellStyles(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC, new Object[] { edge });
-                graphAdapter.setCellStyles(mxConstants.STYLE_ENDSIZE, "7", new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_ENDSIZE, "5", new Object[] { edge });
                 graphAdapter.setCellStyles(mxConstants.STYLE_ROUNDED, "1", new Object[] { edge });
                 
-                // Position the label at the top of the loop
-                graphAdapter.setCellStyles(mxConstants.STYLE_LABEL_POSITION, "center", new Object[] { edge });
+                // Position the label above the arrow
+                graphAdapter.setCellStyles(mxConstants.STYLE_LABEL_POSITION, "right", new Object[] { edge });
                 graphAdapter.setCellStyles(mxConstants.STYLE_VERTICAL_LABEL_POSITION, "top", new Object[] { edge });
+                
+                // Add a special style for self-loops
+                graphAdapter.setCellStyles(mxConstants.STYLE_DASHED, "0", new Object[] { edge });
             } else {
                 // For non-loop edges
                 graphAdapter.setCellStyles(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC, new Object[] { edge });
@@ -696,6 +725,125 @@ public class DfaVisualizer {
         DFA.State targetState = dfa.getTransitions().get(transition);
         
         return targetState == state;
+    }
+    
+    /**
+     * Adds a small badge to states that have self-loops, instead of drawing loop edges.
+     */
+    private void addLoopBadgesToStates(JGraphXAdapter<String, LabeledEdge> graphAdapter, DFA dfa) {
+        // Get all self-loops and organize them by state
+        Map<String, List<Character>> stateLoops = new HashMap<>();
+        
+        // First pass: identify self-loops and remove them from the graph
+        List<Object> loopEdgesToRemove = new ArrayList<>();
+        Object[] allEdges = graphAdapter.getChildCells(graphAdapter.getDefaultParent(), false, true);
+        
+        for (Object edge : allEdges) {
+            Object source = graphAdapter.getModel().getTerminal(edge, true);
+            Object target = graphAdapter.getModel().getTerminal(edge, false);
+            
+            if (source == target) {
+                // This is a self-loop
+                String stateName = graphAdapter.getModel().getValue(source).toString();
+                LabeledEdge labeledEdge = graphAdapter.getCellToEdgeMap().get(edge);
+                
+                if (labeledEdge != null && labeledEdge.getOriginalSymbols() != null) {
+                    // Add the loop symbols to the state's loops map
+                    stateLoops.computeIfAbsent(stateName, k -> new ArrayList<>())
+                              .addAll(labeledEdge.getOriginalSymbols());
+                }
+                
+                // Mark the edge for removal
+                loopEdgesToRemove.add(edge);
+            }
+        }
+        
+        // Remove all loop edges from the graph
+        graphAdapter.removeCells(loopEdgesToRemove.toArray());
+        
+        // Second pass: add loop badges to states
+        for (Map.Entry<String, List<Character>> entry : stateLoops.entrySet()) {
+            String stateName = entry.getKey();
+            List<Character> loopSymbols = entry.getValue();
+            
+            // Sort the symbols for consistent display
+            Collections.sort(loopSymbols);
+            
+            // Create a compact label for the loop symbols
+            String loopLabel = createCompactSymbolsLabel(loopSymbols);
+            
+            // Get the vertex cell
+            Object stateCell = null;
+            for (String vertex : graphAdapter.getVertexToCellMap().keySet()) {
+                if (vertex.equals(stateName)) {
+                    stateCell = graphAdapter.getVertexToCellMap().get(vertex);
+                    break;
+                }
+            }
+            
+            if (stateCell != null) {
+                // Add a loop badge as a child cell of the state
+                addLoopBadge(graphAdapter, stateCell, loopLabel);
+            }
+        }
+    }
+    
+    /**
+     * Creates a compact representation of symbols for loop badges.
+     */
+    private String createCompactSymbolsLabel(List<Character> symbols) {
+        if (symbols.isEmpty()) {
+            return "ε";
+        }
+        
+        if (symbols.size() <= 3) {
+            // For a few symbols, just concatenate them
+            StringBuilder sb = new StringBuilder();
+            for (Character c : symbols) {
+                sb.append(c);
+            }
+            return sb.toString();
+        } else {
+            // For many symbols, use a more compact representation
+            return symbols.size() + "×";
+        }
+    }
+    
+    /**
+     * Adds a loop badge to a state cell.
+     */
+    private void addLoopBadge(JGraphXAdapter<String, LabeledEdge> graphAdapter, Object stateCell, String loopLabel) {
+        // Get the state geometry
+        mxGeometry stateGeometry = graphAdapter.getCellGeometry(stateCell);
+        
+        if (stateGeometry != null) {
+            // Create a small badge cell
+            Object badge = graphAdapter.insertVertex(
+                graphAdapter.getDefaultParent(),
+                null,
+                "↻" + loopLabel, // Loop symbol + label
+                stateGeometry.getX() + stateGeometry.getWidth() * 0.7, // Position at top-right
+                stateGeometry.getY() - 15, // Above the state
+                25, // Width
+                15, // Height
+                "LOOP_BADGE" // Style name
+            );
+            
+            // Apply badge styling
+            graphAdapter.setCellStyles(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_RECTANGLE, new Object[] { badge });
+            graphAdapter.setCellStyles(mxConstants.STYLE_ROUNDED, "1", new Object[] { badge });
+            graphAdapter.setCellStyles(mxConstants.STYLE_FILLCOLOR, LOOP_BADGE_FILL, new Object[] { badge });
+            graphAdapter.setCellStyles(mxConstants.STYLE_STROKECOLOR, LOOP_BADGE_BORDER, new Object[] { badge });
+            graphAdapter.setCellStyles(mxConstants.STYLE_FONTCOLOR, LOOP_BADGE_BORDER, new Object[] { badge });
+            graphAdapter.setCellStyles(mxConstants.STYLE_FONTSIZE, "10", new Object[] { badge });
+            graphAdapter.setCellStyles(mxConstants.STYLE_FONTSTYLE, String.valueOf(1), new Object[] { badge }); // Bold
+            graphAdapter.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "1", new Object[] { badge });
+            
+            // Make the badge selectable independently of the state
+            graphAdapter.setCellStyles(mxConstants.STYLE_MOVABLE, "0", new Object[] { badge });
+            graphAdapter.setCellStyles(mxConstants.STYLE_RESIZABLE, "0", new Object[] { badge });
+            graphAdapter.setCellStyles(mxConstants.STYLE_EDITABLE, "0", new Object[] { badge });
+        }
     }
     
     public static class LabeledEdge extends DefaultEdge {

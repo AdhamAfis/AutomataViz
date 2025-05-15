@@ -5,7 +5,9 @@ import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
@@ -17,6 +19,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import javax.imageio.ImageIO;
+import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -31,6 +34,7 @@ import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JToolBar;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -63,6 +67,7 @@ public class Main {
     private JButton animateButton;
     private boolean animationInProgress = false;
     private ScheduledExecutorService animationExecutor;
+    private JPanel legendPanel; // New panel to display the legend
 
     public Main() {
         converter = new RegexToDfaConverter();
@@ -184,7 +189,15 @@ public class Main {
         addVisualizationControls(nfaPanel);
         addVisualizationControls(dfaPanel);
         
-        frame.add(visualizationSplitPane, BorderLayout.CENTER);
+        // Create the legend panel
+        createLegendPanel();
+        
+        // Create a panel to hold both the visualization and the legend
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.add(visualizationSplitPane, BorderLayout.CENTER);
+        centerPanel.add(legendPanel, BorderLayout.SOUTH);
+        
+        frame.add(centerPanel, BorderLayout.CENTER);
 
         // Status panel
         JPanel statusPanel = new JPanel(new BorderLayout());
@@ -201,7 +214,7 @@ public class Main {
         toolBar.setFloatable(false);
         
         JButton zoomInButton = new JButton("+");
-        zoomInButton.setToolTipText("Zoom In");
+        zoomInButton.setToolTipText("Zoom In (+ key)");
         zoomInButton.addActionListener(e -> {
             JComponent component = (JComponent) panel.getClientProperty("visualComponent");
             if (component instanceof mxGraphComponent) {
@@ -212,7 +225,7 @@ public class Main {
         });
         
         JButton zoomOutButton = new JButton("-");
-        zoomOutButton.setToolTipText("Zoom Out");
+        zoomOutButton.setToolTipText("Zoom Out (- key)");
         zoomOutButton.addActionListener(e -> {
             JComponent component = (JComponent) panel.getClientProperty("visualComponent");
             if (component instanceof mxGraphComponent) {
@@ -223,7 +236,7 @@ public class Main {
         });
         
         JButton resetViewButton = new JButton("Reset");
-        resetViewButton.setToolTipText("Reset View");
+        resetViewButton.setToolTipText("Reset View (Home key)");
         resetViewButton.addActionListener(e -> {
             JComponent component = (JComponent) panel.getClientProperty("visualComponent");
             if (component instanceof mxGraphComponent) {
@@ -249,35 +262,68 @@ public class Main {
                 
                 // Update button appearance
                 if (panModeActive[0]) {
-                    panModeButton.setBackground(new Color(220, 220, 255));
-                    panModeButton.setText("🖐 (Active)");
-                } else {
-                    panModeButton.setBackground(null);
-                    panModeButton.setText("🖐");
-                }
-                
-                // Configure the graph component
-                graphComponent.getGraphHandler().setEnabled(!panModeActive[0]);
-                graphComponent.setPanning(panModeActive[0]);
-                
-                if (panModeActive[0]) {
+                    panModeButton.setBackground(new Color(200, 230, 255));
+                    panModeButton.setToolTipText("Exit Pan Mode");
+                    
+                    // Disable cell selection when in pan mode
+                    graphComponent.getGraph().setCellsSelectable(false);
                     graphComponent.setCursor(new Cursor(Cursor.HAND_CURSOR));
                 } else {
+                    panModeButton.setBackground(null);
+                    panModeButton.setToolTipText("Pan Mode (drag to move)");
+                    
+                    // Re-enable cell selection when exiting pan mode
+                    graphComponent.getGraph().setCellsSelectable(true);
                     graphComponent.setCursor(new Cursor(Cursor.DEFAULT_CURSOR));
                 }
+                
+                // Configure the component for panning
+                graphComponent.getGraphHandler().setEnabled(!panModeActive[0]);
+                graphComponent.setPanning(panModeActive[0]);
             }
         });
         
-        // Add Export to PNG button
-        JButton exportButton = new JButton("📷");
-        exportButton.setToolTipText("Export to PNG");
-        exportButton.addActionListener(e -> exportToPng(panel));
-        
+        // Add buttons to toolbar
         toolBar.add(zoomInButton);
         toolBar.add(zoomOutButton);
         toolBar.add(resetViewButton);
         toolBar.add(panModeButton);
+        
+        // Add export button
+        JButton exportButton = new JButton("Export");
+        exportButton.setToolTipText("Export to PNG image");
+        exportButton.addActionListener(e -> exportToPng(panel));
         toolBar.add(exportButton);
+        
+        // Add keyboard shortcuts for zooming
+        KeyStroke zoomInKey = KeyStroke.getKeyStroke(KeyEvent.VK_PLUS, 0);
+        KeyStroke zoomOutKey = KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, 0);
+        KeyStroke resetKey = KeyStroke.getKeyStroke(KeyEvent.VK_HOME, 0);
+        
+        panel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(zoomInKey, "zoomIn");
+        panel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(zoomOutKey, "zoomOut");
+        panel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(resetKey, "resetView");
+        
+        panel.getActionMap().put("zoomIn", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                zoomInButton.doClick();
+            }
+        });
+        
+        panel.getActionMap().put("zoomOut", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                zoomOutButton.doClick();
+            }
+        });
+        
+        panel.getActionMap().put("resetView", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                resetViewButton.doClick();
+            }
+        });
         
         panel.add(toolBar, BorderLayout.NORTH);
     }
@@ -961,6 +1007,49 @@ public class Main {
             }
         }
         return null;
+    }
+
+    /**
+     * Creates a legend panel explaining the color scheme used in the visualization
+     */
+    private void createLegendPanel() {
+        legendPanel = new JPanel();
+        legendPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 10, 5));
+        legendPanel.setBorder(BorderFactory.createTitledBorder("Legend"));
+        
+        // Add color squares with explanations
+        addLegendItem(legendPanel, new Color(230, 242, 255), "Regular State");
+        addLegendItem(legendPanel, new Color(255, 235, 204), "Accept State");
+        addLegendItem(legendPanel, new Color(230, 255, 204), "Start State");
+        addLegendItem(legendPanel, new Color(255, 204, 204), "Dead State (can't reach accept state)");
+        addLegendItem(legendPanel, Color.decode("#CCCCFF"), "↻ Self-loop Badge");
+        
+        // Add a note about dragging
+        JLabel dragNote = new JLabel("Tip: Drag states to reposition them. Right-click and drag to pan.");
+        dragNote.setFont(dragNote.getFont().deriveFont(Font.ITALIC));
+        legendPanel.add(dragNote);
+        
+        // Keep legend panel compact
+        legendPanel.setPreferredSize(new Dimension(0, 80));
+    }
+    
+    /**
+     * Adds a single colored square with a label to the legend
+     */
+    private void addLegendItem(JPanel legendPanel, Color color, String description) {
+        JPanel colorBox = new JPanel();
+        colorBox.setBackground(color);
+        colorBox.setPreferredSize(new Dimension(15, 15));
+        colorBox.setBorder(BorderFactory.createLineBorder(Color.BLACK, 1));
+        
+        JLabel label = new JLabel(description);
+        label.setFont(label.getFont().deriveFont(10.0f));
+        
+        JPanel itemPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        itemPanel.add(colorBox);
+        itemPanel.add(label);
+        
+        legendPanel.add(itemPanel);
     }
 
     public void show() {
