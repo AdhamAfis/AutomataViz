@@ -17,7 +17,6 @@ import javax.swing.JToolBar;
 
 import com.dfavisualizer.controller.VisualizationController;
 import com.dfavisualizer.ui.MainFrame;
-import com.dfavisualizer.ui.dialogs.AlgorithmVisualizationDialog;
 import com.dfavisualizer.ui.dialogs.StepByStepDialog;
 import com.dfavisualizer.ui.dialogs.TheoryPopupDialog;
 
@@ -36,7 +35,6 @@ public class InputPanel extends JPanel {
     private JButton visualizeButton;
     private JButton debugButton;
     private JButton stepByStepButton;
-    private JButton algorithmVisualizationButton;
     private JButton theoryPopupButton;
     private JButton testButton;
     private JButton animateButton;
@@ -127,14 +125,6 @@ public class InputPanel extends JPanel {
         stepByStepButton.setBackground(new Color(230, 230, 255)); // Light blue background
         stepByStepButton.addActionListener(e -> showStepByStepConversion());
         toolBar.add(stepByStepButton);
-        toolBar.addSeparator(new Dimension(5, 10));
-        
-        // Algorithm visualization button
-        algorithmVisualizationButton = new JButton("Algorithm Viz");
-        algorithmVisualizationButton.setToolTipText("Visualize Thompson's construction and Hopcroft's algorithm");
-        algorithmVisualizationButton.setBackground(new Color(230, 255, 230)); // Light green background
-        algorithmVisualizationButton.addActionListener(e -> showAlgorithmVisualization());
-        toolBar.add(algorithmVisualizationButton);
         toolBar.addSeparator(new Dimension(5, 10));
         
         // Theory popup button
@@ -250,13 +240,6 @@ public class InputPanel extends JPanel {
         }
         
         new StepByStepDialog(mainFrame, regex).display();
-    }
-    
-    /**
-     * Show algorithm visualization dialog
-     */
-    private void showAlgorithmVisualization() {
-        new AlgorithmVisualizationDialog(mainFrame).display();
     }
     
     /**
