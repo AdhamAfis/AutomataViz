@@ -441,6 +441,17 @@ public class Main {
         JComponent component = (JComponent) dfaPanel.getClientProperty("visualComponent");
         if (component instanceof mxGraphComponent) {
             final mxGraphComponent graphComponent = (mxGraphComponent) component;
+            
+            // Remove any temporary elements (like badges) that might have been added during animation
+            Object[] cells = graphComponent.getGraph().getChildVertices(graphComponent.getGraph().getDefaultParent());
+            for (Object cell : cells) {
+                String label = graphComponent.getGraph().getLabel(cell);
+                // Remove any temporary badges that start with the loop symbol
+                if (label != null && label.startsWith("↻")) {
+                    graphComponent.getGraph().getModel().remove(cell);
+                }
+            }
+            
             resetAllCellStyles(graphComponent.getGraph());
             graphComponent.refresh();
         }
@@ -1137,7 +1148,44 @@ public class Main {
         // Find and highlight the current state
         highlightState(graph, fromState, new Color(100, 255, 100));
         
-        // Find and highlight the edge
+        // Check if this is a self-loop (same source and target state)
+        boolean isSelfLoop = fromState.equals(toState);
+        
+        if (isSelfLoop) {
+            // For self-loops, we need to handle them specially since they use badge visualization
+            Object[] vertices = graph.getChildVertices(graph.getDefaultParent());
+            for (Object vertex : vertices) {
+                if (graph.getLabel(vertex).equals(fromState)) {
+                    // Highlight the state with a special pulsing effect for self-loops
+                    graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, "#CCCCFF", new Object[] { vertex });
+                    graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#6666FF", new Object[] { vertex });
+                    graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "4", new Object[] { vertex });
+                    
+                    // Add temporary badge or label for animation
+                    final Object loopBadge = graph.insertVertex(
+                        graph.getDefaultParent(), null, "↻ " + symbol,
+                        graph.getModel().getGeometry(vertex).getX() - 15,
+                        graph.getModel().getGeometry(vertex).getY() - 30,
+                        30, 20, "fontSize=14;fontColor=#FF0000;strokeColor=none;fillColor=none;");
+                    
+                    // Schedule removal of the badge and highlight the target state
+                    animationExecutor.schedule(() -> {
+                        SwingUtilities.invokeLater(() -> {
+                            // Remove the temporary badge
+                            graph.getModel().remove(loopBadge);
+                            
+                            // Highlight the target state (which is the same as source for loop)
+                            highlightState(graph, toState, new Color(100, 100, 255));
+                            graph.refresh();
+                        });
+                    }, 500, TimeUnit.MILLISECONDS);
+                    
+                    return;
+                }
+            }
+        }
+        
+        // Standard edge transition handling (for non-self-loops)
         Object[] edges = graph.getChildEdges(graph.getDefaultParent());
         for (Object edge : edges) {
             Object source = graph.getModel().getTerminal(edge, true);
@@ -1215,6 +1263,16 @@ public class Main {
             if (state != null) {
                 boolean isStart = (currentDfa.getStartState() == state);
                 boolean isAccept = currentDfa.getAcceptStates().contains(state);
+                boolean hasSelfLoop = false;
+                
+                // Check if this state has a self-loop
+                for (DFA.StateTransition transition : currentDfa.getTransitions().keySet()) {
+                    if (transition.getState().equals(state) && 
+                        currentDfa.getTransitions().get(transition).equals(state)) {
+                        hasSelfLoop = true;
+                        break;
+                    }
+                }
                 
                 if (isStart && isAccept) {
                     // Start+Accept state
@@ -1279,19 +1337,25 @@ public class Main {
         addLegendItem(gridPanel, new Color(255, 235, 204), "Accept State");
         addLegendItem(gridPanel, new Color(230, 255, 204), "Start State");
         addLegendItem(gridPanel, new Color(255, 204, 204), "Dead State");
-        addLegendItem(gridPanel, Color.decode("#CCCCFF"), "↻ Self-loop Badge");
+        addLegendItem(gridPanel, Color.decode("#CCCCFF"), "↻ Self-loop State");
+        addLegendItem(gridPanel, new Color(255, 0, 0), "Current Transition");
         
         // Add the grid panel to the legend panel
         legendPanel.add(gridPanel);
         
+        // Add a compact note about animation
+        JLabel animationNote = new JLabel("Animation: Red edges = current transition | Blue highlight = self-loops");
+        animationNote.setFont(animationNote.getFont().deriveFont(10.0f));
+        legendPanel.add(animationNote);
+        
         // Add a compact note about dragging
-        JLabel dragNote = new JLabel("Tip: Drag states to reposition | Right-click+drag to pan | Arrows to scroll");
+        JLabel dragNote = new JLabel("Navigation: Drag states | Ctrl+wheel to zoom | Right-click+drag to pan");
         dragNote.setFont(dragNote.getFont().deriveFont(10.0f));
         legendPanel.add(dragNote);
         
-        // Keep legend panel very compact
-        legendPanel.setPreferredSize(new Dimension(0, 60));
-        legendPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
+        // Keep legend panel compact
+        legendPanel.setPreferredSize(new Dimension(0, 70));
+        legendPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 70));
     }
     
     /**
