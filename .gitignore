@@ -1,3 +1,18 @@
+# Compiled class files
+*.class
+
+# Log files
+*.log
+
+# Package files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
 # Maven
 target/
 pom.xml.tag
@@ -8,22 +23,31 @@ release.properties
 dependency-reduced-pom.xml
 buildNumber.properties
 .mvn/timing.properties
-.mvn/wrapper/maven-wrapper.jar
 
-# IntelliJ IDEA
+# IDE-specific files (Eclipse, IntelliJ, VSCode)
 .idea/
-*.iws
 *.iml
+*.iws
 *.ipr
-out/
-
-# Eclipse
 .settings/
 .classpath
 .project
-.factorypath
-.loadpath
-.recommenders
+.vscode/
+
+# macOS specific files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows specific files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temporary files
+*~
+*.swp
+*.swo
 
 # NetBeans
 /nbproject/private/
@@ -31,31 +55,4 @@ out/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
-
-# VS Code
-.vscode/
-
-# Mac
-.DS_Store
-
-# Windows
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# Java
-*.class
-*.log
-*.jar
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
-hs_err_pid*
-replay_pid*
-
-# Compiled files
-bin/ 
+build/ 

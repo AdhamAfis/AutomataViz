@@ -38,6 +38,30 @@ The application implements a complete regex to DFA pipeline:
 3. **Hopcroft's Algorithm**: Minimizes the DFA by combining equivalent states
 4. **Graph Visualization**: Renders the minimal DFA as an interactive graph with custom styling
 
+## Project Structure
+
+The project follows a standard Maven structure with the following organization:
+
+```
+java-dfa/
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── com/dfavisualizer/
+│   │   │       ├── algorithm/   # Algorithm implementations for automata
+│   │   │       ├── controller/  # Controllers for application logic
+│   │   │       ├── model/       # Domain models (DFA, NFA)
+│   │   │       ├── ui/          # User interface components
+│   │   │       │   ├── components/ # Reusable UI components
+│   │   │       │   └── dialogs/    # Dialog windows
+│   │   │       └── util/        # Utility classes
+│   │   └── resources/           # Application resources (images, config)
+│   └── test/
+│       ├── java/                # Test classes mirroring main structure
+│       └── resources/           # Test resources
+└── docs/                        # Documentation
+```
+
 ## Building and Running
 
 ### Prerequisites
@@ -57,6 +81,12 @@ This will create a JAR file with dependencies in the `target` directory.
 
 ```
 java -jar target/java-dfa-1.0-SNAPSHOT-jar-with-dependencies.jar
+```
+
+Or run directly with Maven:
+
+```
+mvn exec:java -Dexec.mainClass="com.dfavisualizer.ui.MainApp"
 ```
 
 ## Usage
