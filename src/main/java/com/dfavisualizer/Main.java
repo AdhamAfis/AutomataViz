@@ -2,11 +2,16 @@ package com.dfavisualizer;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Font;
+import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -29,11 +34,13 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JToolBar;
+import javax.swing.JViewport;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -193,12 +200,34 @@ public class Main {
         createLegendPanel();
         
         // Create a panel to hold both the visualization and the legend
-        JPanel centerPanel = new JPanel(new BorderLayout());
-        centerPanel.add(visualizationSplitPane, BorderLayout.CENTER);
-        centerPanel.add(legendPanel, BorderLayout.SOUTH);
+        JPanel centerPanel = new JPanel(new BorderLayout(0, 5)); // 5px vertical gap
         
+        // Show or hide the split view based on checkbox
+        if (splitViewCheckbox.isSelected()) {
+            visualizationSplitPane.setLeftComponent(nfaPanel);
+            visualizationSplitPane.setRightComponent(dfaPanel);
+            centerPanel.add(visualizationSplitPane, BorderLayout.CENTER);
+            visualizationSplitPane.setDividerLocation(0.5);
+        } else {
+            centerPanel.add(dfaPanel, BorderLayout.CENTER);
+        }
+        
+        // Add legend at the bottom with some padding
+        JPanel legendWrapper = new JPanel(new BorderLayout());
+        legendWrapper.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        legendWrapper.add(legendPanel, BorderLayout.CENTER);
+        centerPanel.add(legendWrapper, BorderLayout.SOUTH);
+        
+        // Replace current center panel with new one
+        // First, remove any existing components in the CENTER position
+        Component centerComponent = ((BorderLayout)frame.getContentPane().getLayout()).getLayoutComponent(BorderLayout.CENTER);
+        if (centerComponent != null) {
+            frame.remove(centerComponent);
+        }
+        
+        // Add the new center panel
         frame.add(centerPanel, BorderLayout.CENTER);
-
+        
         // Status panel
         JPanel statusPanel = new JPanel(new BorderLayout());
         statusArea = new JTextArea("Ready");
@@ -425,6 +454,9 @@ public class Main {
                 JComponent nfaVisualization = nfaVisualizer.visualizeNfa(converter.getLastNfa());
                 enablePanAndZoom(nfaVisualization);
                 JScrollPane nfaScroll = new JScrollPane(nfaVisualization);
+                nfaScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+                nfaScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+                nfaScroll.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
                 nfaPanel.add(nfaScroll, BorderLayout.CENTER);
                 nfaPanel.putClientProperty("visualComponent", nfaVisualization);
             }
@@ -433,18 +465,40 @@ public class Main {
             JComponent dfaVisualization = dfaVisualizer.visualizeDfa(currentDfa);
             enablePanAndZoom(dfaVisualization);
             JScrollPane dfaScroll = new JScrollPane(dfaVisualization);
+            dfaScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+            dfaScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+            dfaScroll.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
             dfaPanel.add(dfaScroll, BorderLayout.CENTER);
             dfaPanel.putClientProperty("visualComponent", dfaVisualization);
             
+            // Create main panel with visualization and legend
+            JPanel centerPanel = new JPanel(new BorderLayout(0, 5)); // 5px vertical gap
+            
             // Show or hide the split view based on checkbox
             if (showSplitView) {
-                frame.remove(visualizationSplitPane);
-                frame.add(visualizationSplitPane, BorderLayout.CENTER);
+                visualizationSplitPane.setLeftComponent(nfaPanel);
+                visualizationSplitPane.setRightComponent(dfaPanel);
+                centerPanel.add(visualizationSplitPane, BorderLayout.CENTER);
                 visualizationSplitPane.setDividerLocation(0.5);
             } else {
-                frame.remove(visualizationSplitPane);
-                frame.add(dfaPanel, BorderLayout.CENTER);
+                centerPanel.add(dfaPanel, BorderLayout.CENTER);
             }
+            
+            // Add legend at the bottom with some padding
+            JPanel legendWrapper = new JPanel(new BorderLayout());
+            legendWrapper.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+            legendWrapper.add(legendPanel, BorderLayout.CENTER);
+            centerPanel.add(legendWrapper, BorderLayout.SOUTH);
+            
+            // Replace current center panel with new one
+            // First, remove any existing components in the CENTER position
+            Component centerComponent = ((BorderLayout)frame.getContentPane().getLayout()).getLayoutComponent(BorderLayout.CENTER);
+            if (centerComponent != null) {
+                frame.remove(centerComponent);
+            }
+            
+            // Add the new center panel
+            frame.add(centerPanel, BorderLayout.CENTER);
             
             // Refresh the UI
             frame.revalidate();
@@ -460,6 +514,33 @@ public class Main {
         if (component instanceof mxGraphComponent) {
             mxGraphComponent graphComponent = (mxGraphComponent) component;
             
+            // Make component properly resize with parent
+            graphComponent.setAutoExtend(true);
+            graphComponent.setPreferredSize(new Dimension(800, 600));
+            
+            // Enable automatic resize when the window is resized
+            graphComponent.addComponentListener(new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    // Get the current scale
+                    double scale = graphComponent.getGraph().getView().getScale();
+                    
+                    // Get the component dimensions
+                    int width = graphComponent.getWidth();
+                    int height = graphComponent.getHeight();
+                    
+                    // Only auto-resize if below a certain size threshold to prevent excessive shrinking
+                    if (width > 300 && height > 300) {
+                        // Adjust scale based on component size if needed
+                        if (scale < 0.5 && width > 600 && height > 400) {
+                            graphComponent.zoomTo(Math.min(1.0, scale * 1.2), true);
+                        } else if (scale > 1.5 && (width < 400 || height < 300)) {
+                            graphComponent.zoomTo(Math.max(0.5, scale * 0.8), true);
+                        }
+                    }
+                }
+            });
+            
             // Enable basic panning with mouse
             graphComponent.setPanning(true);
             
@@ -472,6 +553,9 @@ public class Main {
                     // Capture start position for panning
                     lastX = e.getX();
                     lastY = e.getY();
+                    
+                    // Request focus to enable keyboard shortcuts
+                    graphComponent.requestFocusInWindow();
                 }
             });
             
@@ -519,9 +603,73 @@ public class Main {
                         graphComponent.zoomTo(scale / 1.1, true);
                     }
                     e.consume();
+                } else {
+                    // Allow normal scrolling when not pressing Ctrl
+                    JScrollPane scrollPane = getParentScrollPane(graphComponent);
+                    if (scrollPane != null) {
+                        // Determine scroll direction and speed
+                        int direction = e.getWheelRotation() > 0 ? 1 : -1;
+                        int scrollAmount = 30 * direction;
+                        
+                        if (e.isShiftDown()) {
+                            // Horizontal scroll when Shift is pressed
+                            JScrollBar horizontal = scrollPane.getHorizontalScrollBar();
+                            horizontal.setValue(horizontal.getValue() + scrollAmount);
+                        } else {
+                            // Vertical scroll
+                            JScrollBar vertical = scrollPane.getVerticalScrollBar();
+                            vertical.setValue(vertical.getValue() + scrollAmount);
+                        }
+                        e.consume();
+                    }
+                }
+            });
+            
+            // Add keyboard shortcuts for navigation
+            graphComponent.addKeyListener(new KeyAdapter() {
+                @Override
+                public void keyPressed(KeyEvent e) {
+                    JScrollPane scrollPane = getParentScrollPane(graphComponent);
+                    if (scrollPane != null) {
+                        int scrollAmount = 20;
+                        
+                        switch (e.getKeyCode()) {
+                            case KeyEvent.VK_UP:
+                                scrollPane.getVerticalScrollBar().setValue(
+                                    scrollPane.getVerticalScrollBar().getValue() - scrollAmount);
+                                e.consume();
+                                break;
+                            case KeyEvent.VK_DOWN:
+                                scrollPane.getVerticalScrollBar().setValue(
+                                    scrollPane.getVerticalScrollBar().getValue() + scrollAmount);
+                                e.consume();
+                                break;
+                            case KeyEvent.VK_LEFT:
+                                scrollPane.getHorizontalScrollBar().setValue(
+                                    scrollPane.getHorizontalScrollBar().getValue() - scrollAmount);
+                                e.consume();
+                                break;
+                            case KeyEvent.VK_RIGHT:
+                                scrollPane.getHorizontalScrollBar().setValue(
+                                    scrollPane.getHorizontalScrollBar().getValue() + scrollAmount);
+                                e.consume();
+                                break;
+                        }
+                    }
                 }
             });
         }
+    }
+    
+    /**
+     * Helper method to find the parent JScrollPane of a component
+     */
+    private JScrollPane getParentScrollPane(Component component) {
+        Container parent = component.getParent();
+        while (parent != null && !(parent instanceof JScrollPane)) {
+            parent = parent.getParent();
+        }
+        return (JScrollPane) parent;
     }
     
     private void testString(ActionEvent e) {
@@ -754,14 +902,23 @@ public class Main {
         animationExecutor = Executors.newSingleThreadScheduledExecutor();
         
         // Set up animation state
-        DFA.State currentState = currentDfa.getStartState();
+        final DFA.State startState = currentDfa.getStartState();
         JComponent component = (JComponent) dfaPanel.getClientProperty("visualComponent");
         
         if (component instanceof mxGraphComponent) {
-            mxGraphComponent graphComponent = (mxGraphComponent) component;
+            final mxGraphComponent graphComponent = (mxGraphComponent) component;
+            
+            // Reset all cell styles before starting animation
+            resetAllCellStyles(graphComponent.getGraph());
             
             // Highlight start state
-            highlightState(graphComponent.getGraph(), currentState.getName(), new Color(100, 255, 100));
+            SwingUtilities.invokeLater(() -> {
+                highlightState(graphComponent.getGraph(), startState.getName(), new Color(100, 255, 100));
+                graphComponent.refresh();
+            });
+            
+            // Track the current state as we process
+            DFA.State currentState = startState;
             
             // Schedule animation steps for each character in the input
             for (int i = 0; i < input.length(); i++) {
@@ -775,12 +932,18 @@ public class Main {
                 // If no valid transition, stop here
                 if (nextState == null) {
                     // Schedule the final step that will show the error
+                    final int finalStep = step;
                     animationExecutor.schedule(() -> {
-                        highlightInvalidTransition(graphComponent.getGraph(), fromState.getName(), symbol);
-                        statusArea.setText("Animation complete - String REJECTED at position " + step + 
-                                         ": No transition from state " + fromState.getName() + 
-                                         " on symbol '" + symbol + "'");
-                        animationComplete(false);
+                        SwingUtilities.invokeLater(() -> {
+                            // Reset all styles before highlighting the error
+                            resetAllCellStyles(graphComponent.getGraph());
+                            highlightInvalidTransition(graphComponent.getGraph(), fromState.getName(), symbol);
+                            statusArea.setText("Animation complete - String REJECTED at position " + finalStep + 
+                                             ": No transition from state " + fromState.getName() + 
+                                             " on symbol '" + symbol + "'");
+                            graphComponent.refresh();
+                            animationComplete(false);
+                        });
                     }, (step + 1) * 1000, TimeUnit.MILLISECONDS);
                     return;
                 }
@@ -788,11 +951,15 @@ public class Main {
                 // Schedule this step
                 final DFA.State toState = nextState;
                 animationExecutor.schedule(() -> {
-                    // Highlight the transition
-                    highlightTransition(graphComponent.getGraph(), fromState.getName(), toState.getName(), symbol);
-                    // Update status text
-                    statusArea.setText("Step " + (step + 1) + ": " + fromState.getName() + 
-                                     " --[" + symbol + "]--> " + toState.getName());
+                    SwingUtilities.invokeLater(() -> {
+                        // Reset all styles before highlighting the transition
+                        resetAllCellStyles(graphComponent.getGraph());
+                        highlightTransition(graphComponent.getGraph(), fromState.getName(), toState.getName(), symbol);
+                        // Update status text
+                        statusArea.setText("Step " + (step + 1) + ": " + fromState.getName() + 
+                                         " --[" + symbol + "]--> " + toState.getName());
+                        graphComponent.refresh();
+                    });
                 }, (step + 1) * 1000, TimeUnit.MILLISECONDS);
                 
                 currentState = nextState;
@@ -801,22 +968,45 @@ public class Main {
             // Schedule the final state check
             final DFA.State finalState = currentState;
             animationExecutor.schedule(() -> {
-                boolean isAcceptState = currentDfa.getAcceptStates().contains(finalState);
-                
-                if (isAcceptState) {
-                    // Highlight the final state as accept
-                    highlightState(graphComponent.getGraph(), finalState.getName(), new Color(255, 200, 100));
-                    statusArea.setText("Animation complete - String ACCEPTED: Ended in accept state " + 
-                                     finalState.getName());
-                } else {
-                    // Highlight the final state as non-accept
-                    highlightState(graphComponent.getGraph(), finalState.getName(), new Color(255, 150, 150));
-                    statusArea.setText("Animation complete - String REJECTED: Ended in non-accept state " + 
-                                     finalState.getName());
-                }
-                
-                animationComplete(isAcceptState);
+                SwingUtilities.invokeLater(() -> {
+                    boolean isAcceptState = currentDfa.getAcceptStates().contains(finalState);
+                    
+                    // Reset all styles before the final highlight
+                    resetAllCellStyles(graphComponent.getGraph());
+                    
+                    if (isAcceptState) {
+                        // Highlight the final state as accept
+                        highlightState(graphComponent.getGraph(), finalState.getName(), new Color(255, 200, 100));
+                        statusArea.setText("Animation complete - String ACCEPTED: Ended in accept state " + 
+                                         finalState.getName());
+                    } else {
+                        // Highlight the final state as non-accept
+                        highlightState(graphComponent.getGraph(), finalState.getName(), new Color(255, 150, 150));
+                        statusArea.setText("Animation complete - String REJECTED: Ended in non-accept state " + 
+                                         finalState.getName());
+                    }
+                    
+                    graphComponent.refresh();
+                    animationComplete(isAcceptState);
+                });
             }, (input.length() + 1) * 1000, TimeUnit.MILLISECONDS);
+        }
+    }
+    
+    /**
+     * Reset all cell styles in the graph to their default values
+     */
+    private void resetAllCellStyles(mxGraph graph) {
+        // Vertices (states)
+        Object[] vertices = graph.getChildVertices(graph.getDefaultParent());
+        for (Object vertex : vertices) {
+            resetCellStyle(graph, vertex);
+        }
+        
+        // Edges (transitions)
+        Object[] edges = graph.getChildEdges(graph.getDefaultParent());
+        for (Object edge : edges) {
+            resetCellStyle(graph, edge);
         }
     }
     
@@ -830,15 +1020,14 @@ public class Main {
         animateButton.setText("Animate");
         animateButton.setBackground(null);
         
-        // Reset all cell colors
+        // Reset all cell colors on the UI thread
         JComponent component = (JComponent) dfaPanel.getClientProperty("visualComponent");
         if (component instanceof mxGraphComponent) {
-            mxGraphComponent graphComponent = (mxGraphComponent) component;
-            
-            Object[] cells = graphComponent.getGraph().getChildCells(graphComponent.getGraph().getDefaultParent());
-            for (Object cell : cells) {
-                resetCellStyle(graphComponent.getGraph(), cell);
-            }
+            final mxGraphComponent graphComponent = (mxGraphComponent) component;
+            SwingUtilities.invokeLater(() -> {
+                resetAllCellStyles(graphComponent.getGraph());
+                graphComponent.refresh();
+            });
         }
         
         statusArea.setText("Animation stopped.");
@@ -877,16 +1066,17 @@ public class Main {
                                               color.getRed(), color.getGreen(), color.getBlue());
                 graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, hexColor, new Object[] { vertex });
                 graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "3", new Object[] { vertex });
+                
+                // Ensure the highlighted state is visible (bring to front)
+                graph.orderCells(false, new Object[] { vertex });
+                
                 break;
             }
         }
     }
     
     private void highlightTransition(mxGraph graph, String fromState, String toState, char symbol) {
-        // Reset previous highlighted state
-        resetHighlightedStates(graph);
-        
-        // Highlight the current state
+        // Find and highlight the current state
         highlightState(graph, fromState, new Color(100, 255, 100));
         
         // Find and highlight the edge
@@ -905,10 +1095,16 @@ public class Main {
                     graph.setCellStyles(mxConstants.STYLE_FONTCOLOR, "#FF0000", new Object[] { edge });
                     graph.setCellStyles(mxConstants.STYLE_FONTSIZE, "14", new Object[] { edge });
                     
+                    // Ensure the highlighted edge is visible (bring to front)
+                    graph.orderCells(false, new Object[] { edge });
+                    
                     // After a delay, highlight the target state
                     animationExecutor.schedule(() -> {
-                        // Highlight the target state
-                        highlightState(graph, toState, new Color(100, 100, 255));
+                        SwingUtilities.invokeLater(() -> {
+                            // Highlight the target state
+                            highlightState(graph, toState, new Color(100, 100, 255));
+                            graph.refresh();
+                        });
                     }, 500, TimeUnit.MILLISECONDS);
                     
                     break;
@@ -1014,23 +1210,30 @@ public class Main {
      */
     private void createLegendPanel() {
         legendPanel = new JPanel();
-        legendPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 10, 5));
+        legendPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 10, 2)); // Reduce vertical spacing
         legendPanel.setBorder(BorderFactory.createTitledBorder("Legend"));
         
-        // Add color squares with explanations
-        addLegendItem(legendPanel, new Color(230, 242, 255), "Regular State");
-        addLegendItem(legendPanel, new Color(255, 235, 204), "Accept State");
-        addLegendItem(legendPanel, new Color(230, 255, 204), "Start State");
-        addLegendItem(legendPanel, new Color(255, 204, 204), "Dead State (can't reach accept state)");
-        addLegendItem(legendPanel, Color.decode("#CCCCFF"), "↻ Self-loop Badge");
+        // Add color squares with explanations in a more compact grid layout
+        JPanel gridPanel = new JPanel(new GridLayout(0, 3, 10, 2)); // 3 columns, as many rows as needed
         
-        // Add a note about dragging
-        JLabel dragNote = new JLabel("Tip: Drag states to reposition them. Right-click and drag to pan.");
-        dragNote.setFont(dragNote.getFont().deriveFont(Font.ITALIC));
+        // Add items to the grid panel instead of directly to legendPanel
+        addLegendItem(gridPanel, new Color(230, 242, 255), "Regular State");
+        addLegendItem(gridPanel, new Color(255, 235, 204), "Accept State");
+        addLegendItem(gridPanel, new Color(230, 255, 204), "Start State");
+        addLegendItem(gridPanel, new Color(255, 204, 204), "Dead State");
+        addLegendItem(gridPanel, Color.decode("#CCCCFF"), "↻ Self-loop Badge");
+        
+        // Add the grid panel to the legend panel
+        legendPanel.add(gridPanel);
+        
+        // Add a compact note about dragging
+        JLabel dragNote = new JLabel("Tip: Drag states to reposition | Right-click+drag to pan | Arrows to scroll");
+        dragNote.setFont(dragNote.getFont().deriveFont(10.0f));
         legendPanel.add(dragNote);
         
-        // Keep legend panel compact
-        legendPanel.setPreferredSize(new Dimension(0, 80));
+        // Keep legend panel very compact
+        legendPanel.setPreferredSize(new Dimension(0, 60));
+        legendPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
     }
     
     /**
@@ -1039,13 +1242,13 @@ public class Main {
     private void addLegendItem(JPanel legendPanel, Color color, String description) {
         JPanel colorBox = new JPanel();
         colorBox.setBackground(color);
-        colorBox.setPreferredSize(new Dimension(15, 15));
+        colorBox.setPreferredSize(new Dimension(12, 12));
         colorBox.setBorder(BorderFactory.createLineBorder(Color.BLACK, 1));
         
         JLabel label = new JLabel(description);
-        label.setFont(label.getFont().deriveFont(10.0f));
+        label.setFont(label.getFont().deriveFont(9.0f));
         
-        JPanel itemPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        JPanel itemPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 0));
         itemPanel.add(colorBox);
         itemPanel.add(label);
         
