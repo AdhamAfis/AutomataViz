@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.swing.JComponent;
 import javax.swing.SwingConstants;
@@ -36,17 +37,31 @@ public class DfaVisualizer {
         "#FFEBCC", // Light orange - Accept states
         "#E6FFCC", // Light green - Start states
         "#CCFFD5", // Mint green - Special states
-        "#F2E6FF"  // Light purple - Intermediate states
+        "#F2E6FF",  // Light purple - Intermediate states
+        "#FFCCCC"  // Light red - Dead states
     };
     
     // Colors for edges
     private static final String LOOP_COLOR = "#6666FF"; // Blue for loops
     private static final String NORMAL_EDGE_COLOR = "#666666"; // Dark gray for normal edges
     private static final String SPECIAL_EDGE_COLOR = "#FF6666"; // Red for special transitions
+    private static final String DEAD_STATE_BORDER_COLOR = "#AA0000"; // Dark red for dead state borders
     
     // For transition grouping
     private static final int MAX_DISPLAY_SYMBOLS = 12;
     private static final int MIN_RANGE_SIZE = 3;
+    
+    // Control flag for whether to highlight dead states
+    private boolean highlightDeadStates = true;
+
+    /**
+     * Sets whether to highlight dead states in the visualization.
+     * 
+     * @param highlight true to highlight dead states, false otherwise
+     */
+    public void setHighlightDeadStates(boolean highlight) {
+        this.highlightDeadStates = highlight;
+    }
 
     /**
      * Creates a graphical visualization of the DFA.
@@ -266,9 +281,26 @@ public class DfaVisualizer {
         }
         
         tooltip.append("<br>");
+        
+        // Add information about dead states if highlighting is enabled
+        Set<DFA.State> deadStates = dfa.getDeadStates();
+        if (!deadStates.isEmpty() && highlightDeadStates) {
+            tooltip.append("Dead States: ");
+            for (DFA.State deadState : deadStates) {
+                tooltip.append(deadState.getName()).append(" ");
+            }
+            tooltip.append("<br>");
+        }
+        
         tooltip.append("Total States: ").append(dfa.getStates().size()).append("<br>");
         tooltip.append("Blue edges represent self-loops<br>");
         tooltip.append("Grey edges represent normal transitions<br>");
+        
+        // Only mention dead states in the tooltip if highlighting is enabled
+        if (highlightDeadStates && !deadStates.isEmpty()) {
+            tooltip.append("Red-bordered states are dead states (can't reach accept state)<br>");
+        }
+        
         tooltip.append("</html>");
         
         graphComponent.setToolTipText(tooltip.toString());
@@ -405,6 +437,19 @@ public class DfaVisualizer {
         startAcceptStyle.put(mxConstants.STYLE_DASHED, false);
         stylesheet.putCellStyle("START_ACCEPT", startAcceptStyle);
         
+        // Dead state style
+        Map<String, Object> deadStyle = new HashMap<>(vertexStyle);
+        deadStyle.put(mxConstants.STYLE_STROKECOLOR, DEAD_STATE_BORDER_COLOR); // Dark red border
+        deadStyle.put(mxConstants.STYLE_STROKEWIDTH, "3");
+        deadStyle.put(mxConstants.STYLE_FILLCOLOR, STATE_COLORS[5]); // Light red fill
+        deadStyle.put(mxConstants.STYLE_DASHED, true); // Dashed border for visual distinction
+        stylesheet.putCellStyle("DEAD", deadStyle);
+        
+        // Dead+Start state (shouldn't happen in valid DFAs, but just in case)
+        Map<String, Object> deadStartStyle = new HashMap<>(deadStyle);
+        deadStartStyle.put(mxConstants.STYLE_FILLCOLOR, STATE_COLORS[2]); // Keep green fill
+        stylesheet.putCellStyle("DEAD_START", deadStartStyle);
+        
         // Edge style
         Map<String, Object> edgeStyle = new HashMap<>();
         edgeStyle.put(mxConstants.STYLE_ROUNDED, true);
@@ -436,6 +481,9 @@ public class DfaVisualizer {
             vertexToCellMap.put(key, graphAdapter.getVertexToCellMap().get(key));
         }
         
+        // Get dead states for highlighting
+        Set<DFA.State> deadStates = dfa.getDeadStates();
+        
         for (Map.Entry<String, Object> entry : vertexToCellMap.entrySet()) {
             String vertexName = entry.getKey();
             Object cell = entry.getValue();
@@ -445,8 +493,17 @@ public class DfaVisualizer {
             if (state != null) {
                 boolean isStart = (dfa.getStartState() == state);
                 boolean isAccept = dfa.getAcceptStates().contains(state);
+                boolean isDead = deadStates.contains(state);
                 
-                if (isStart && isAccept) {
+                // Apply styles based on state type, respecting highlight flag for dead states
+                if (isDead && highlightDeadStates) {
+                    // Dead states get priority in visualization if highlighting is enabled
+                    if (isStart) {
+                        graphAdapter.setCellStyle("DEAD_START", new Object[] { cell });
+                    } else {
+                        graphAdapter.setCellStyle("DEAD", new Object[] { cell });
+                    }
+                } else if (isStart && isAccept) {
                     graphAdapter.setCellStyle("START_ACCEPT", new Object[] { cell });
                 } else if (isStart) {
                     graphAdapter.setCellStyle("START", new Object[] { cell });

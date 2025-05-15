@@ -17,6 +17,7 @@ A comprehensive Java application that converts regular expressions to minimal De
   - Zoom in/out with mouse wheel (Ctrl+scroll) or buttons
   - Pan around large automata by dragging
   - Reset view to original state
+  - Export visualizations as PNG images
 - Test strings against the generated DFA with step-by-step simulation trace
 - Support for all standard regex operations:
   - Basic symbols and character classes
@@ -76,7 +77,11 @@ java -jar target/java-dfa-1.0-SNAPSHOT-jar-with-dependencies.jar
    - When Pan Mode is active, click and drag anywhere to move the visualization
    - Alt+Drag or middle/right button drag also works for panning
    - Reset the view to original size with the Reset button
-5. To test strings against the DFA:
+5. Export the visualization:
+   - Click the "📷" (Export) button to save the current visualization as a PNG image
+   - Choose a location and filename in the save dialog
+   - The status bar will show the path where the image was saved
+6. To test strings against the DFA:
    - Enter a test string in the "Test String" field
    - Click "Test"
    - A detailed simulation trace will show you how the DFA processes your string
@@ -98,6 +103,62 @@ java -jar target/java-dfa-1.0-SNAPSHOT-jar-with-dependencies.jar
 - **Tooltips**:
   - Hover over the visualization for information about states and transitions
 
+## Understanding Graph Visualization
+
+The visualization of automata in this application uses directed graphs to represent both NFAs and DFAs, with special attention to making the graphs clear and intuitive.
+
+### Graph Structure
+
+- **States (Nodes)**: Each state in the automaton is represented as a circular node labeled with its name (e.g., "q0", "q1", etc.)
+- **Transitions (Edges)**: Transitions between states are shown as directed arrows labeled with the input symbols that trigger the transition
+
+### Layout Algorithms
+
+The application automatically selects the best layout algorithm based on the size and complexity of the automaton:
+
+1. **Circle Layout**: For small automata (≤5 states), states are arranged in a circle for a compact representation
+2. **Hierarchical Layout**: For medium and large automata (>5 states), states are organized in a left-to-right or top-to-bottom flow, with the start state typically at the left/top and accept states toward the right/bottom
+
+### Special Visualizations
+
+- **Self-Loops**: When a state transitions to itself (common with Kleene star operations like `a*`), the loop is drawn with a distinctive blue color and positioned with clear spacing to make it more visible
+- **Multi-Symbol Transitions**: When multiple symbols can trigger the same transition, they are grouped together (e.g., "a,b,c" or "a-z" for ranges)
+- **Epsilon Transitions (NFA only)**: Empty transitions are shown as red dashed lines labeled with "ε"
+
+### Layout Optimization
+
+For complex automata:
+- Edge crossings are minimized where possible
+- State spacing is optimized for readability
+- Similar transitions are grouped and labeled efficiently
+- Long labels for transitions with many symbols are simplified to ranges or counts
+
+### Interactive Features
+
+- **Zoom**: Use the zoom controls to focus on specific parts of larger automata
+- **Pan**: Drag the visualization to move around when viewing large automata
+- **Reset View**: Return to the original view with the Reset button
+- **Tooltips**: Hover over states and transitions to see additional information
+
+### Visual Distinction
+
+The clear visual distinction between different types of states and transitions helps highlight the structure and behavior of the automaton:
+- Start and accept states are immediately identifiable by their distinctive colors
+- Self-loops are visually emphasized to highlight repetition patterns
+- Epsilon transitions in NFAs stand out with their red dashed appearance
+
+## Visualization Examples
+
+*This section will include screenshots demonstrating various visualizations:*
+
+1. **Simple DFA Example**: A visualization of a small DFA for a simple regex like `a(b|c)*`
+2. **NFA and DFA Comparison**: Side-by-side visualization showing an NFA and its equivalent DFA
+3. **Complex Automaton**: Visualization of a larger automaton with many states and transitions
+4. **Loop Visualization**: Close-up example of how loops are displayed
+5. **Epsilon Transitions**: Example showing epsilon transitions in an NFA
+
+*Screenshots will be added in a future update.*
+
 ## Examples
 
 The application can handle complex regular expressions such as:
@@ -116,6 +177,50 @@ The application can handle complex regular expressions such as:
 - **DfaVisualizer**: Renders DFAs using JGraphT and JGraphX with custom styling and layouts
 - **NfaVisualizer**: Renders NFAs with improved loop visualization and consistent color scheme
 
+## Technical Graph Implementation
+
+The visualization components leverage several libraries and techniques to create clear, interactive representations of the automata:
+
+### Libraries and Technologies
+
+- **JGraphT**: Used for the underlying graph data structure
+- **JGraphX (mxGraph)**: Provides the visualization and rendering capabilities
+- **Swing**: Used for the UI components and integration
+
+### Graph Construction Process
+
+1. **Data Structure Conversion**: The NFA/DFA is converted to a JGraphT `DefaultDirectedGraph` with custom `LabeledEdge` objects
+2. **Edge Aggregation**: Multiple transitions between the same states are combined with intelligent labeling
+3. **Range Detection**: Consecutive character transitions are automatically detected and displayed as ranges
+4. **Adapter Creation**: A `JGraphXAdapter` bridges between the JGraphT graph and the mxGraph visualization
+
+### Style Implementation
+
+- **mxStylesheet**: Custom style sheets define the visual appearance of states and transitions
+- **Style Mapping**: State types (start, accept, regular) are mapped to appropriate styles
+- **Edge Style Selection**: Different edge types (normal, loop, epsilon) use distinct style configurations
+
+### Loop Visualization Enhancement
+
+Self-loops are specially handled through multiple techniques:
+- **Detection**: Self-loops are identified during graph construction
+- **Custom Geometry**: Special offset points ensure loops are clearly visible
+- **Entity Relation Style**: The `entityRelation` edge style creates clearer loop renderings
+- **Color Coding**: A distinctive blue color makes loops immediately identifiable
+
+### Layout Selection Logic
+
+The application uses the following logic to determine the best layout:
+- For graphs with ≤5 states: Circle layout with optimized radius
+- For graphs with 6-10 states: Hierarchical layout with medium spacing
+- For graphs with >10 states: Hierarchical layout with larger spacing and orientation optimizations
+
+### Transition Label Optimization
+
+- For transitions with ≤5 symbols: Display all symbols separated by commas
+- For transitions with >5 symbols: Detect and display character ranges when possible (e.g., "a-z")
+- For very large transitions: Display symbol count rather than all symbols "[35 symbols]"
+
 ## Recent Improvements
 
 - Enhanced loop visualization with distinctive blue styling and improved positioning
@@ -124,6 +229,7 @@ The application can handle complex regular expressions such as:
 - Tooltips with valuable state and transition information
 - Optimized edge label positioning for better readability
 - Enhanced visual distinction between different types of states and transitions
+- Added ability to export automata visualization as PNG images
 
 ## Future Improvements
 
@@ -134,4 +240,4 @@ The application can handle complex regular expressions such as:
 - Animation of string acceptance testing
 - Dark mode support
 - Ability to save/load automata configurations
-- Export of DFA as image or SVG 
+- Export to additional formats (SVG, PDF)

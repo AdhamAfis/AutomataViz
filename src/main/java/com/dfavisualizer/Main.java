@@ -8,13 +8,17 @@ import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
+import java.io.File;
 import java.util.Map;
 import java.util.Set;
 
+import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -26,8 +30,10 @@ import javax.swing.JTextField;
 import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import com.mxgraph.swing.mxGraphComponent;
+import com.mxgraph.util.mxCellRenderer;
 import com.mxgraph.util.mxPoint;
 
 public class Main {
@@ -42,13 +48,18 @@ public class Main {
     private NfaVisualizer nfaVisualizer;
     private JTextArea statusArea;
     private DFA currentDfa;
+    private DFA nonMinimizedDfa; // Store the non-minimized DFA
     private JCheckBox splitViewCheckbox;
+    private JCheckBox minimizeDfaCheckbox; // New checkbox for DFA minimization
+    private JCheckBox showDeadStatesCheckbox; // New checkbox for showing dead states
     private double zoomFactor = 1.0;
+    private DfaMinimizer minimizer; // Direct reference to minimizer
 
     public Main() {
         converter = new RegexToDfaConverter();
         dfaVisualizer = new DfaVisualizer();
         nfaVisualizer = new NfaVisualizer();
+        minimizer = new DfaMinimizer(); // Initialize minimizer
         initializeUI();
     }
 
@@ -77,6 +88,18 @@ public class Main {
         splitViewCheckbox = new JCheckBox("Show NFA/DFA Split View");
         splitViewCheckbox.setSelected(true);
         buttonPanel.add(splitViewCheckbox);
+        
+        // Add checkbox for DFA minimization
+        minimizeDfaCheckbox = new JCheckBox("Minimize DFA");
+        minimizeDfaCheckbox.setSelected(true);
+        minimizeDfaCheckbox.setToolTipText("Apply Hopcroft's algorithm to minimize the DFA");
+        buttonPanel.add(minimizeDfaCheckbox);
+        
+        // Add checkbox for showing dead states
+        showDeadStatesCheckbox = new JCheckBox("Highlight Dead States");
+        showDeadStatesCheckbox.setSelected(true);
+        showDeadStatesCheckbox.setToolTipText("Highlight states that cannot reach an accept state");
+        buttonPanel.add(showDeadStatesCheckbox);
         
         JButton visualizeButton = new JButton("Visualize DFA");
         visualizeButton.addActionListener(this::visualizeDfa);
@@ -226,12 +249,74 @@ public class Main {
             }
         });
         
+        // Add Export to PNG button
+        JButton exportButton = new JButton("📷");
+        exportButton.setToolTipText("Export to PNG");
+        exportButton.addActionListener(e -> exportToPng(panel));
+        
         toolBar.add(zoomInButton);
         toolBar.add(zoomOutButton);
         toolBar.add(resetViewButton);
         toolBar.add(panModeButton);
+        toolBar.add(exportButton);
         
         panel.add(toolBar, BorderLayout.NORTH);
+    }
+    
+    /**
+     * Exports the current graph visualization to a PNG file
+     * 
+     * @param panel The panel containing the visualization component
+     */
+    private void exportToPng(JPanel panel) {
+        JComponent component = (JComponent) panel.getClientProperty("visualComponent");
+        if (component instanceof mxGraphComponent) {
+            mxGraphComponent graphComponent = (mxGraphComponent) component;
+            
+            // Create a file chooser
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Save PNG Image");
+            
+            // Set file filter to only show PNG files
+            fileChooser.setFileFilter(new FileNameExtensionFilter("PNG Images (*.png)", "png"));
+            
+            // Show save dialog
+            int userSelection = fileChooser.showSaveDialog(frame);
+            
+            if (userSelection == JFileChooser.APPROVE_OPTION) {
+                File fileToSave = fileChooser.getSelectedFile();
+                
+                // Ensure file has .png extension
+                if (!fileToSave.getAbsolutePath().toLowerCase().endsWith(".png")) {
+                    fileToSave = new File(fileToSave.getAbsolutePath() + ".png");
+                }
+                
+                try {
+                    // Create a BufferedImage of the graph
+                    BufferedImage image = mxCellRenderer.createBufferedImage(
+                        graphComponent.getGraph(), 
+                        null, 
+                        graphComponent.getGraph().getView().getScale(), 
+                        Color.WHITE, 
+                        graphComponent.isAntiAlias(),
+                        null);
+                    
+                    if (image != null) {
+                        // Save image to file
+                        ImageIO.write(image, "PNG", fileToSave);
+                        statusArea.setText("Graph exported successfully to: " + fileToSave.getAbsolutePath());
+                    } else {
+                        JOptionPane.showMessageDialog(frame, 
+                            "Failed to create image from graph.", 
+                            "Export Error", JOptionPane.ERROR_MESSAGE);
+                    }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(frame, 
+                        "Error exporting graph: " + ex.getMessage(), 
+                        "Export Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }
     }
 
     private void visualizeDfa(ActionEvent e) {
@@ -244,7 +329,21 @@ public class Main {
 
         try {
             statusArea.setText("Converting regex to DFA...");
-            currentDfa = converter.convertRegexToDfa(regex);
+            
+            // Configure the DFA visualizer to highlight dead states based on checkbox
+            dfaVisualizer.setHighlightDeadStates(showDeadStatesCheckbox.isSelected());
+            
+            // First, convert regex to non-minimized DFA
+            nonMinimizedDfa = converter.convertRegexToDfaWithoutMinimization(regex);
+            
+            // Apply minimization if selected
+            if (minimizeDfaCheckbox.isSelected()) {
+                currentDfa = minimizer.minimize(nonMinimizedDfa);
+                statusArea.setText("Conversion and minimization successful: " + countDfaStats(currentDfa));
+            } else {
+                currentDfa = nonMinimizedDfa;
+                statusArea.setText("Conversion successful (no minimization): " + countDfaStats(currentDfa));
+            }
             
             boolean showSplitView = splitViewCheckbox.isSelected();
             
@@ -285,8 +384,6 @@ public class Main {
             // Refresh the UI
             frame.revalidate();
             frame.repaint();
-            
-            statusArea.setText("Conversion successful: " + countDfaStats(currentDfa));
         } catch (Exception ex) {
             statusArea.setText("Error: " + ex.getMessage());
             JOptionPane.showMessageDialog(frame, "Error parsing regex: " + ex.getMessage(), 
@@ -519,10 +616,17 @@ public class Main {
     }
     
     private String countDfaStats(DFA dfa) {
-        return dfa.getStates().size() + " states, " + 
-               dfa.getAlphabet().size() + " symbols, " + 
-               dfa.getAcceptStates().size() + " accept states, " +
-               dfa.getTransitions().size() + " transitions";
+        String stats = "States: " + dfa.getStates().size() + 
+                       ", Accept States: " + dfa.getAcceptStates().size() + 
+                       ", Transitions: " + dfa.getTransitions().size();
+                       
+        // Add information about dead states if any
+        Set<DFA.State> deadStates = dfa.getDeadStates();
+        if (!deadStates.isEmpty()) {
+            stats += ", Dead States: " + deadStates.size();
+        }
+        
+        return stats;
     }
 
     public void show() {

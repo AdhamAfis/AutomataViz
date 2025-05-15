@@ -194,4 +194,65 @@ public class RegexToDfaConverter {
         
         return nfa;
     }
+
+    /**
+     * Converts a regular expression to a DFA without applying minimization.
+     * This is useful for visualizing the intermediate DFA before minimization.
+     * 
+     * @param regex The regular expression to convert
+     * @return A non-minimized DFA that accepts the language defined by the regex
+     * @throws IllegalArgumentException if the regex is invalid
+     */
+    public DFA convertRegexToDfaWithoutMinimization(String regex) {
+        if (regex == null || regex.isEmpty()) {
+            throw new IllegalArgumentException("Regular expression cannot be null or empty.");
+        }
+
+        // Validate regex syntax
+        try {
+            Pattern.compile(regex);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid regular expression: " + e.getMessage());
+        }
+
+        try {
+            // Use optimized implementation if enabled
+            if (useOptimizedImplementation) {
+                // Try using the optimized parser for complex regexes
+                try {
+                    // Use optimized parsing that creates fewer states and transitions
+                    DFA optimizedDfa = optimizedParser.parseToDfa(regex);
+                    
+                    // For intermediate visualization, we need to create a conventional NFA
+                    OptimizedNFA optNfa = optimizedParser.parseToOptimizedNfa(regex);
+                    lastNfa = optNfa.toConventionalNFA();
+                    lastDfa = optimizedDfa;
+                    
+                    return optimizedDfa;
+                } catch (Exception e) {
+                    // If optimized parsing fails, fall back to original implementation
+                    System.out.println("Optimized parsing failed, falling back to original: " + e.getMessage());
+                    return convertRegexToDfaOriginalWithoutMinimization(regex);
+                }
+            } else {
+                return convertRegexToDfaOriginalWithoutMinimization(regex);
+            }
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Error converting regex to DFA: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Converts a regular expression to a DFA using the original implementation,
+     * but without applying minimization.
+     */
+    private DFA convertRegexToDfaOriginalWithoutMinimization(String regex) {
+        // Step 1: Parse the regex and build an NFA using Thompson's construction
+        lastNfa = parser.parse(regex);
+        
+        // Step 2: Convert the NFA to a DFA using subset construction
+        lastDfa = subsetConstruction.convertNfaToDfa(lastNfa);
+        
+        return lastDfa;
+    }
 } 
