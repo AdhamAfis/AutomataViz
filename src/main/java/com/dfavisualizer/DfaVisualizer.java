@@ -839,7 +839,28 @@ public class DfaVisualizer {
             graphAdapter.setCellStyles(mxConstants.STYLE_FONTSTYLE, String.valueOf(1), new Object[] { badge }); // Bold
             graphAdapter.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "1", new Object[] { badge });
             
-            // Make the badge selectable independently of the state
+            // Connect the badge to the state with an invisible edge
+            // This will make the badge move along with the state when dragged
+            Object link = graphAdapter.insertEdge(
+                graphAdapter.getDefaultParent(), 
+                null, 
+                "", 
+                stateCell, 
+                badge
+            );
+            
+            // Style the edge to be invisible
+            graphAdapter.setCellStyles(mxConstants.STYLE_STROKECOLOR, "none", new Object[] { link });
+            graphAdapter.setCellStyles(mxConstants.STYLE_DASHED, "0", new Object[] { link });
+            graphAdapter.setCellStyles(mxConstants.STYLE_STARTARROW, "none", new Object[] { link });
+            graphAdapter.setCellStyles(mxConstants.STYLE_ENDARROW, "none", new Object[] { link });
+            
+            // Set the edge geometry to maintain a fixed offset from the state
+            mxGeometry edgeGeometry = new mxGeometry();
+            edgeGeometry.setRelative(true);
+            graphAdapter.getModel().setGeometry(link, edgeGeometry);
+            
+            // Make the badge not independently movable
             graphAdapter.setCellStyles(mxConstants.STYLE_MOVABLE, "0", new Object[] { badge });
             graphAdapter.setCellStyles(mxConstants.STYLE_RESIZABLE, "0", new Object[] { badge });
             graphAdapter.setCellStyles(mxConstants.STYLE_EDITABLE, "0", new Object[] { badge });

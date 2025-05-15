@@ -1269,24 +1269,44 @@ public class Main {
                     graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#6666FF", new Object[] { vertex });
                     graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "4", new Object[] { vertex });
                     
-                    // Add temporary badge or label for animation
-                    final Object loopBadge = graph.insertVertex(
-                        graph.getDefaultParent(), null, "↻ " + symbol,
-                        graph.getModel().getGeometry(vertex).getX() - 15,
-                        graph.getModel().getGeometry(vertex).getY() - 30,
-                        30, 20, "fontSize=14;fontColor=#FF0000;strokeColor=none;fillColor=none;");
+                    // Get geometry for positioning
+                    mxGeometry geo = graph.getModel().getGeometry(vertex);
                     
-                    // Schedule removal of the badge and highlight the target state
-                    animationExecutor.schedule(() -> {
-                        SwingUtilities.invokeLater(() -> {
-                            // Remove the temporary badge
-                            graph.getModel().remove(loopBadge);
-                            
-                            // Highlight the target state (which is the same as source for loop)
-                            highlightState(graph, toState, new Color(100, 100, 255));
-                            graph.refresh();
-                        });
-                    }, 500, TimeUnit.MILLISECONDS);
+                    // Add temporary badge or label for animation
+                    graph.getModel().beginUpdate();
+                    try {
+                        // Create a badge that will move with the state
+                        final Object loopBadge = graph.insertVertex(
+                            graph.getDefaultParent(), null, "↻ " + symbol,
+                            geo.getX() - 15, geo.getY() - 30,
+                            30, 20, "fontSize=14;fontColor=#FF0000;strokeColor=none;fillColor=none;");
+                        
+                        // Add an invisible link to make the badge move with the state
+                        Object link = graph.insertEdge(
+                            graph.getDefaultParent(), null, "", vertex, loopBadge);
+                        graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "none", new Object[] { link });
+                        graph.setCellStyles(mxConstants.STYLE_STARTARROW, "none", new Object[] { link });
+                        graph.setCellStyles(mxConstants.STYLE_ENDARROW, "none", new Object[] { link });
+                        
+                        // Set geometry to maintain a fixed position relative to the state
+                        mxGeometry edgeGeo = new mxGeometry();
+                        edgeGeo.setRelative(true);
+                        graph.getModel().setGeometry(link, edgeGeo);
+                        
+                        // Schedule removal of the badge and highlight the target state
+                        animationExecutor.schedule(() -> {
+                            SwingUtilities.invokeLater(() -> {
+                                // Remove the temporary badge and its link
+                                graph.removeCells(new Object[] { loopBadge, link });
+                                
+                                // Highlight the target state (which is the same as source for loop)
+                                highlightState(graph, toState, new Color(100, 100, 255));
+                                graph.refresh();
+                            });
+                        }, 500, TimeUnit.MILLISECONDS);
+                    } finally {
+                        graph.getModel().endUpdate();
+                    }
                     
                     return;
                 }
@@ -1334,22 +1354,36 @@ public class Main {
         // Highlight the current state in red to indicate error
         highlightState(graph, stateName, new Color(255, 100, 100));
         
-        // Display the missing transition symbol nearby
+        // Find the state cell
+        Object stateCell = null;
         Object[] vertices = graph.getChildVertices(graph.getDefaultParent());
         for (Object vertex : vertices) {
             if (graph.getLabel(vertex).equals(stateName)) {
-                // Add a temporary label to indicate the missing transition
-                graph.getModel().beginUpdate();
-                try {
-                    mxGeometry geo = graph.getModel().getGeometry(vertex);
-                    Object errorLabel = graph.insertVertex(
-                        graph.getDefaultParent(), null, "No transition for '" + symbol + "'",
-                        geo.getX() + geo.getWidth() + 10, geo.getY(), 120, 30, 
-                        "fontSize=10;fontColor=#FF0000;fillColor=#FFEEEE;strokeColor=#FF0000;rounded=1;");
-                } finally {
-                    graph.getModel().endUpdate();
-                }
+                stateCell = vertex;
                 break;
+            }
+        }
+        
+        if (stateCell != null) {
+            // Display the missing transition symbol nearby
+            graph.getModel().beginUpdate();
+            try {
+                mxGeometry geo = graph.getModel().getGeometry(stateCell);
+                Object errorLabel = graph.insertVertex(
+                    graph.getDefaultParent(), null, "No transition for '" + symbol + "'",
+                    geo.getX() + geo.getWidth() + 10, geo.getY(), 120, 30, 
+                    "fontSize=10;fontColor=#FF0000;fillColor=#FFEEEE;strokeColor=#FF0000;rounded=1;");
+                
+                // Create a temporary link to make sure error bubble moves with the state if dragged
+                Object link = graph.insertEdge(
+                    graph.getDefaultParent(), null, "", stateCell, errorLabel);
+                graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "none", new Object[] { link });
+                graph.setCellStyles(mxConstants.STYLE_ENDARROW, "none", new Object[] { link });
+                
+                // Make the error bubble not independently movable
+                graph.setCellStyles(mxConstants.STYLE_MOVABLE, "0", new Object[] { errorLabel });
+            } finally {
+                graph.getModel().endUpdate();
             }
         }
     }
