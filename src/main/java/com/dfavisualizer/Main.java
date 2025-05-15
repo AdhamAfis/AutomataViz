@@ -2,38 +2,53 @@ package com.dfavisualizer;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.Map;
 import java.util.Set;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+
+import com.mxgraph.swing.mxGraphComponent;
+import com.mxgraph.util.mxPoint;
 
 public class Main {
     private JFrame frame;
     private JTextField regexField;
     private JTextField testStringField;
-    private JPanel visualizationPanel;
+    private JSplitPane visualizationSplitPane;
+    private JPanel nfaPanel;
+    private JPanel dfaPanel;
     private RegexToDfaConverter converter;
-    private DfaVisualizer visualizer;
+    private DfaVisualizer dfaVisualizer;
+    private NfaVisualizer nfaVisualizer;
     private JTextArea statusArea;
     private DFA currentDfa;
+    private JCheckBox splitViewCheckbox;
+    private double zoomFactor = 1.0;
 
     public Main() {
         converter = new RegexToDfaConverter();
-        visualizer = new DfaVisualizer();
+        dfaVisualizer = new DfaVisualizer();
+        nfaVisualizer = new NfaVisualizer();
         initializeUI();
     }
 
@@ -41,7 +56,7 @@ public class Main {
         // Set up the main frame
         frame = new JFrame("Regex to DFA Visualizer");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(800, 600);
+        frame.setSize(1000, 700); // Larger default size
         frame.setLayout(new BorderLayout());
 
         // Input panel with regex field and buttons
@@ -57,6 +72,11 @@ public class Main {
         
         // Panel for buttons
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        
+        // Add checkbox for split view
+        splitViewCheckbox = new JCheckBox("Show NFA/DFA Split View");
+        splitViewCheckbox.setSelected(true);
+        buttonPanel.add(splitViewCheckbox);
         
         JButton visualizeButton = new JButton("Visualize DFA");
         visualizeButton.addActionListener(this::visualizeDfa);
@@ -107,10 +127,22 @@ public class Main {
         
         frame.add(inputPanel, BorderLayout.NORTH);
 
-        // Visualization panel
-        visualizationPanel = new JPanel(new BorderLayout());
-        visualizationPanel.setBorder(BorderFactory.createTitledBorder("DFA Visualization"));
-        frame.add(visualizationPanel, BorderLayout.CENTER);
+        // Create split pane for visualization
+        nfaPanel = new JPanel(new BorderLayout());
+        nfaPanel.setBorder(BorderFactory.createTitledBorder("NFA Visualization"));
+        
+        dfaPanel = new JPanel(new BorderLayout());
+        dfaPanel.setBorder(BorderFactory.createTitledBorder("DFA Visualization"));
+        
+        visualizationSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, nfaPanel, dfaPanel);
+        visualizationSplitPane.setResizeWeight(0.5); // Equal sizing
+        visualizationSplitPane.setOneTouchExpandable(true);
+        
+        // Add visualization controls to both panels
+        addVisualizationControls(nfaPanel);
+        addVisualizationControls(dfaPanel);
+        
+        frame.add(visualizationSplitPane, BorderLayout.CENTER);
 
         // Status panel
         JPanel statusPanel = new JPanel(new BorderLayout());
@@ -120,6 +152,86 @@ public class Main {
         statusScroll.setPreferredSize(new Dimension(0, 100));
         statusPanel.add(statusScroll, BorderLayout.CENTER);
         frame.add(statusPanel, BorderLayout.SOUTH);
+    }
+    
+    private void addVisualizationControls(JPanel panel) {
+        JToolBar toolBar = new JToolBar();
+        toolBar.setFloatable(false);
+        
+        JButton zoomInButton = new JButton("+");
+        zoomInButton.setToolTipText("Zoom In");
+        zoomInButton.addActionListener(e -> {
+            JComponent component = (JComponent) panel.getClientProperty("visualComponent");
+            if (component instanceof mxGraphComponent) {
+                mxGraphComponent graphComponent = (mxGraphComponent) component;
+                double scale = graphComponent.getGraph().getView().getScale();
+                graphComponent.zoomTo(scale * 1.2, true);
+            }
+        });
+        
+        JButton zoomOutButton = new JButton("-");
+        zoomOutButton.setToolTipText("Zoom Out");
+        zoomOutButton.addActionListener(e -> {
+            JComponent component = (JComponent) panel.getClientProperty("visualComponent");
+            if (component instanceof mxGraphComponent) {
+                mxGraphComponent graphComponent = (mxGraphComponent) component;
+                double scale = graphComponent.getGraph().getView().getScale();
+                graphComponent.zoomTo(scale / 1.2, true);
+            }
+        });
+        
+        JButton resetViewButton = new JButton("Reset");
+        resetViewButton.setToolTipText("Reset View");
+        resetViewButton.addActionListener(e -> {
+            JComponent component = (JComponent) panel.getClientProperty("visualComponent");
+            if (component instanceof mxGraphComponent) {
+                mxGraphComponent graphComponent = (mxGraphComponent) component;
+                graphComponent.zoomTo(1.0, true);
+                graphComponent.getGraph().getView().setTranslate(new mxPoint(0, 0));
+            }
+        });
+        
+        JButton panModeButton = new JButton("🖐");
+        panModeButton.setToolTipText("Pan Mode (drag to move)");
+        
+        // Track pan mode state
+        final boolean[] panModeActive = {false};
+        
+        panModeButton.addActionListener(e -> {
+            JComponent component = (JComponent) panel.getClientProperty("visualComponent");
+            if (component instanceof mxGraphComponent) {
+                mxGraphComponent graphComponent = (mxGraphComponent) component;
+                
+                // Toggle pan mode
+                panModeActive[0] = !panModeActive[0];
+                
+                // Update button appearance
+                if (panModeActive[0]) {
+                    panModeButton.setBackground(new Color(220, 220, 255));
+                    panModeButton.setText("🖐 (Active)");
+                } else {
+                    panModeButton.setBackground(null);
+                    panModeButton.setText("🖐");
+                }
+                
+                // Configure the graph component
+                graphComponent.getGraphHandler().setEnabled(!panModeActive[0]);
+                graphComponent.setPanning(panModeActive[0]);
+                
+                if (panModeActive[0]) {
+                    graphComponent.setCursor(new Cursor(Cursor.HAND_CURSOR));
+                } else {
+                    graphComponent.setCursor(new Cursor(Cursor.DEFAULT_CURSOR));
+                }
+            }
+        });
+        
+        toolBar.add(zoomInButton);
+        toolBar.add(zoomOutButton);
+        toolBar.add(resetViewButton);
+        toolBar.add(panModeButton);
+        
+        panel.add(toolBar, BorderLayout.NORTH);
     }
 
     private void visualizeDfa(ActionEvent e) {
@@ -134,22 +246,119 @@ public class Main {
             statusArea.setText("Converting regex to DFA...");
             currentDfa = converter.convertRegexToDfa(regex);
             
-            // Clear the visualization panel
-            visualizationPanel.removeAll();
+            boolean showSplitView = splitViewCheckbox.isSelected();
             
-            // Add the new visualization
-            JComponent visualization = visualizer.visualizeDfa(currentDfa);
-            visualizationPanel.add(new JScrollPane(visualization), BorderLayout.CENTER);
+            // Clear the visualization panels
+            nfaPanel.removeAll();
+            dfaPanel.removeAll();
+            
+            // Re-add the toolbar
+            addVisualizationControls(nfaPanel);
+            addVisualizationControls(dfaPanel);
+            
+            // Visualize NFA if split view is enabled
+            if (showSplitView && converter.getLastNfa() != null) {
+                JComponent nfaVisualization = nfaVisualizer.visualizeNfa(converter.getLastNfa());
+                enablePanAndZoom(nfaVisualization);
+                JScrollPane nfaScroll = new JScrollPane(nfaVisualization);
+                nfaPanel.add(nfaScroll, BorderLayout.CENTER);
+                nfaPanel.putClientProperty("visualComponent", nfaVisualization);
+            }
+            
+            // Visualize DFA
+            JComponent dfaVisualization = dfaVisualizer.visualizeDfa(currentDfa);
+            enablePanAndZoom(dfaVisualization);
+            JScrollPane dfaScroll = new JScrollPane(dfaVisualization);
+            dfaPanel.add(dfaScroll, BorderLayout.CENTER);
+            dfaPanel.putClientProperty("visualComponent", dfaVisualization);
+            
+            // Show or hide the split view based on checkbox
+            if (showSplitView) {
+                frame.remove(visualizationSplitPane);
+                frame.add(visualizationSplitPane, BorderLayout.CENTER);
+                visualizationSplitPane.setDividerLocation(0.5);
+            } else {
+                frame.remove(visualizationSplitPane);
+                frame.add(dfaPanel, BorderLayout.CENTER);
+            }
             
             // Refresh the UI
-            visualizationPanel.revalidate();
-            visualizationPanel.repaint();
+            frame.revalidate();
+            frame.repaint();
             
             statusArea.setText("Conversion successful: " + countDfaStats(currentDfa));
         } catch (Exception ex) {
             statusArea.setText("Error: " + ex.getMessage());
             JOptionPane.showMessageDialog(frame, "Error parsing regex: " + ex.getMessage(), 
                     "Parsing Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    private void enablePanAndZoom(JComponent component) {
+        if (component instanceof mxGraphComponent) {
+            mxGraphComponent graphComponent = (mxGraphComponent) component;
+            
+            // Enable basic panning with mouse
+            graphComponent.setPanning(true);
+            
+            // Add enhanced pan and zoom controls with mouse
+            graphComponent.getGraphControl().addMouseListener(new MouseAdapter() {
+                private int lastX, lastY;
+                
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    // Capture start position for panning
+                    lastX = e.getX();
+                    lastY = e.getY();
+                }
+            });
+            
+            graphComponent.getGraphControl().addMouseMotionListener(new MouseAdapter() {
+                private int lastX, lastY;
+                
+                @Override
+                public void mouseDragged(MouseEvent e) {
+                    // If middle button or right button is pressed, pan the view
+                    if (e.isAltDown() || e.getButton() == MouseEvent.BUTTON2 || e.getButton() == MouseEvent.BUTTON3) {
+                        int dx = e.getX() - lastX;
+                        int dy = e.getY() - lastY;
+                        
+                        if (dx != 0 || dy != 0) {
+                            mxPoint translate = graphComponent.getGraph().getView().getTranslate();
+                            graphComponent.getGraph().getView().setTranslate(
+                                new mxPoint(translate.getX() + dx / graphComponent.getZoomFactor(),
+                                           translate.getY() + dy / graphComponent.getZoomFactor()));
+                            
+                            // Update for next drag event
+                            lastX = e.getX();
+                            lastY = e.getY();
+                        }
+                    }
+                }
+                
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    // Capture start position for panning
+                    lastX = e.getX();
+                    lastY = e.getY();
+                }
+            });
+            
+            // Add mouse wheel zoom support
+            graphComponent.addMouseWheelListener(e -> {
+                if (e.isControlDown()) {
+                    if (e.getWheelRotation() < 0) {
+                        // Zoom in
+                        double scale = graphComponent.getGraph().getView().getScale();
+                        graphComponent.zoomTo(scale * 1.1, true);
+                    } else {
+                        // Zoom out
+                        double scale = graphComponent.getGraph().getView().getScale();
+                        graphComponent.zoomTo(scale / 1.1, true);
+                    }
+                    e.consume();
+                }
+            });
         }
     }
     

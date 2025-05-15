@@ -13,11 +13,32 @@ public class RegexToDfaConverter {
     private final RegexParser parser;
     private final SubsetConstruction subsetConstruction;
     private final DfaMinimizer minimizer;
+    
+    private NFA lastNfa; // Store the last created NFA
+    private DFA lastDfa; // Store the non-minimized DFA
 
     public RegexToDfaConverter() {
         this.parser = new RegexParser();
         this.subsetConstruction = new SubsetConstruction();
         this.minimizer = new DfaMinimizer();
+    }
+
+    /**
+     * Gets the last NFA created during conversion
+     * 
+     * @return The last NFA created, or null if none exists
+     */
+    public NFA getLastNfa() {
+        return lastNfa;
+    }
+    
+    /**
+     * Gets the last non-minimized DFA created during conversion
+     * 
+     * @return The last non-minimized DFA created, or null if none exists
+     */
+    public DFA getLastDfa() {
+        return lastDfa;
     }
 
     /**
@@ -42,13 +63,13 @@ public class RegexToDfaConverter {
 
         try {
             // Step 1: Parse the regex and build an NFA using Thompson's construction
-            NFA nfa = parser.parse(regex);
+            lastNfa = parser.parse(regex);
             
             // Step 2: Convert the NFA to a DFA using subset construction
-            DFA dfa = subsetConstruction.convertNfaToDfa(nfa);
+            lastDfa = subsetConstruction.convertNfaToDfa(lastNfa);
             
             // Step 3: Minimize the DFA using Hopcroft's algorithm
-            DFA minimizedDfa = minimizer.minimize(dfa);
+            DFA minimizedDfa = minimizer.minimize(lastDfa);
             
             return minimizedDfa;
         } catch (Exception e) {

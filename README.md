@@ -10,6 +10,11 @@ A comprehensive Java application that converts regular expressions to minimal De
   - Improved layouts for different DFA sizes
   - Clean and modern styling with shadows and rounded states
   - Smart transition label simplification for complex automata
+- Split view to visualize both NFA and DFA side by side
+- Advanced visualization controls:
+  - Zoom in/out with mouse wheel (Ctrl+scroll) or buttons
+  - Pan around large automata by dragging
+  - Reset view to original state
 - Test strings against the generated DFA with step-by-step simulation trace
 - Support for all standard regex operations:
   - Basic symbols and character classes
@@ -55,13 +60,20 @@ java -jar target/java-dfa-1.0-SNAPSHOT-jar-with-dependencies.jar
 
 1. Enter a regular expression in the input field
 2. Click "Visualize DFA"
-3. The minimal DFA will be displayed as a directed graph:
+3. The automata will be displayed:
+   - If "Show NFA/DFA Split View" is checked, you'll see both the NFA (left) and minimized DFA (right)
    - Green states: Start states
    - Double-bordered states: Accept states
    - Colored states: Regular states with distinct colors for better visualization
    - Arrows: Transitions labeled with input symbols
    - Self-loops: Distinctively styled for better visibility
-4. To test strings against the DFA:
+4. Navigate the visualization:
+   - Zoom in/out using Ctrl+Mouse Wheel or the +/- buttons
+   - Click the "🖐" (Pan Mode) button to enable drag-to-move navigation
+   - When Pan Mode is active, click and drag anywhere to move the visualization
+   - Alt+Drag or middle/right button drag also works for panning
+   - Reset the view to original size with the Reset button
+5. To test strings against the DFA:
    - Enter a test string in the "Test String" field
    - Click "Test"
    - A detailed simulation trace will show you how the DFA processes your string
@@ -89,4 +101,8 @@ The application can handle complex regular expressions such as:
 - Performance optimizations for large regular expressions
 - Support for additional regex features like negated character classes
 - Step-by-step visualization of the NFA/DFA conversion process
+- Improved layout algorithms for complex automata
+- Animation of string acceptance testing
+- Dark mode support
+- Ability to save/load automata configurations
 - Export of DFA as image or SVG 
