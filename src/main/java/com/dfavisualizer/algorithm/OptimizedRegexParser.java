@@ -1,8 +1,12 @@
-package com.dfavisualizer;
+package com.dfavisualizer.algorithm;
 
 import java.util.BitSet;
 import java.util.HashSet;
 import java.util.Set;
+
+import com.dfavisualizer.model.DFA;
+import com.dfavisualizer.model.NFA;
+import com.dfavisualizer.model.OptimizedNFA;
 
 /**
  * An optimized parser for regular expressions that incorporates:

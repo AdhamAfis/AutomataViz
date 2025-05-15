@@ -170,6 +170,16 @@ The application can handle complex regular expressions such as:
 
 ## Implementation Details
 
+The application is organized into a structured package hierarchy following a modern architecture:
+
+- **com.dfavisualizer.model**: Contains the domain model classes (DFA, NFA, OptimizedNFA)
+- **com.dfavisualizer.algorithm**: Houses algorithms for regex parsing, automata construction, and minimization
+- **com.dfavisualizer.ui**: Holds UI components including visualizers and the main application
+- **com.dfavisualizer.controller**: Contains controllers that coordinate between UI and model layers
+- **com.dfavisualizer.util**: Provides utility classes used across the application
+
+### Core Components
+
 - **NFA class**: Represents NFAs with epsilon transitions and provides operations for NFA composition
 - **RegexParser**: Implements recursive descent parsing with Thompson's construction
 - **SubsetConstruction**: Implements the subset construction algorithm for NFA to DFA conversion

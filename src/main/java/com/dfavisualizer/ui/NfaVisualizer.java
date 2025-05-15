@@ -1,4 +1,4 @@
-package com.dfavisualizer;
+package com.dfavisualizer.ui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -29,6 +29,7 @@ import org.jgrapht.ext.JGraphXAdapter;
 import org.jgrapht.graph.DefaultDirectedGraph;
 import org.jgrapht.graph.DefaultEdge;
 
+import com.dfavisualizer.model.NFA;
 import com.mxgraph.layout.hierarchical.mxHierarchicalLayout;
 import com.mxgraph.layout.mxCircleLayout;
 import com.mxgraph.layout.mxIGraphLayout;

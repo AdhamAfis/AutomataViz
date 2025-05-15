@@ -1,4 +1,7 @@
-package com.dfavisualizer;
+package com.dfavisualizer.algorithm;
+
+import com.dfavisualizer.model.DFA;
+import com.dfavisualizer.model.NFA;
 
 /**
  * Minimizes an NFA by first converting it to a DFA, minimizing the DFA,

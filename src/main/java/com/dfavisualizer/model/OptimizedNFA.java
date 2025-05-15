@@ -1,4 +1,4 @@
-package com.dfavisualizer;
+package com.dfavisualizer.model;
 
 import java.util.ArrayList;
 import java.util.BitSet;

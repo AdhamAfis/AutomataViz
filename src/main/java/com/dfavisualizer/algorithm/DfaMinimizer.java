@@ -1,4 +1,4 @@
-package com.dfavisualizer;
+package com.dfavisualizer.algorithm;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+
+import com.dfavisualizer.model.DFA;
 
 /**
  * Implements Hopcroft's algorithm for DFA minimization.

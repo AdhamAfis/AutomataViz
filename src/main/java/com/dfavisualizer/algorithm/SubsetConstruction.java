@@ -1,4 +1,4 @@
-package com.dfavisualizer;
+package com.dfavisualizer.algorithm;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -6,6 +6,9 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+
+import com.dfavisualizer.model.DFA;
+import com.dfavisualizer.model.NFA;
 
 /**
  * Implements the subset construction algorithm to convert an NFA to a DFA.

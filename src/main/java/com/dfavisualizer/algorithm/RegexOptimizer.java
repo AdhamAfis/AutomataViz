@@ -1,9 +1,11 @@
-package com.dfavisualizer;
+package com.dfavisualizer.algorithm;
 
 import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import com.dfavisualizer.model.DFA;
 
 /**
  * Optimizes regular expressions by recognizing common patterns

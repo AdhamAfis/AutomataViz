@@ -1,7 +1,10 @@
-package com.dfavisualizer;
+package com.dfavisualizer.algorithm;
 
 import java.util.Map;
 import java.util.regex.Pattern;
+import com.dfavisualizer.model.DFA;
+import com.dfavisualizer.model.NFA;
+import com.dfavisualizer.model.OptimizedNFA;
 
 /**
  * Converts regular expressions to DFAs using a complete implementation of:

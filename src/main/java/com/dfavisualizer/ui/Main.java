@@ -1,4 +1,4 @@
-package com.dfavisualizer;
+package com.dfavisualizer.ui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -48,6 +48,13 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
+import com.dfavisualizer.algorithm.DfaMinimizer;
+import com.dfavisualizer.algorithm.NfaMinimizer;
+import com.dfavisualizer.algorithm.RegexParser;
+import com.dfavisualizer.algorithm.RegexToDfaConverter;
+import com.dfavisualizer.algorithm.SubsetConstruction;
+import com.dfavisualizer.model.DFA;
+import com.dfavisualizer.model.NFA;
 import com.mxgraph.model.mxGeometry;
 import com.mxgraph.swing.mxGraphComponent;
 import com.mxgraph.util.mxCellRenderer;

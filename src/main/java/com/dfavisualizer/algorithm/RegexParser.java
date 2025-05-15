@@ -1,4 +1,6 @@
-package com.dfavisualizer;
+package com.dfavisualizer.algorithm;
+
+import com.dfavisualizer.model.NFA;
 
 /**
  * Parser for regular expressions that builds NFAs using Thompson's construction algorithm.

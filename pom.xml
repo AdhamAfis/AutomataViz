@@ -50,7 +50,7 @@
                         <configuration>
                             <archive>
                                 <manifest>
-                                    <mainClass>com.dfavisualizer.Main</mainClass>
+                                    <mainClass>com.dfavisualizer.ui.Main</mainClass>
                                 </manifest>
                             </archive>
                             <descriptorRefs>
