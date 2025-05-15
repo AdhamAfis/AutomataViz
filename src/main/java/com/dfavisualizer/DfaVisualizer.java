@@ -22,7 +22,6 @@ import com.mxgraph.model.mxGeometry;
 import com.mxgraph.swing.mxGraphComponent;
 import com.mxgraph.util.mxConstants;
 import com.mxgraph.util.mxPoint;
-import com.mxgraph.view.mxEdgeStyle;
 import com.mxgraph.view.mxStylesheet;
 
 /**
@@ -31,13 +30,19 @@ import com.mxgraph.view.mxStylesheet;
 public class DfaVisualizer {
 
     private static final int STATE_SIZE = 50;
+    // Updated color scheme for better contrast and distinguishability
     private static final String[] STATE_COLORS = {
-        "#E6F2FF", // Light blue
-        "#FFF2CC", // Light yellow
-        "#E6FFCC", // Light green
-        "#FFE6CC", // Light orange
-        "#F2E6FF"  // Light purple
+        "#E6F2FF", // Light blue - Regular states
+        "#FFEBCC", // Light orange - Accept states
+        "#E6FFCC", // Light green - Start states
+        "#CCFFD5", // Mint green - Special states
+        "#F2E6FF"  // Light purple - Intermediate states
     };
+    
+    // Colors for edges
+    private static final String LOOP_COLOR = "#6666FF"; // Blue for loops
+    private static final String NORMAL_EDGE_COLOR = "#666666"; // Dark gray for normal edges
+    private static final String SPECIAL_EDGE_COLOR = "#FF6666"; // Red for special transitions
     
     // For transition grouping
     private static final int MAX_DISPLAY_SYMBOLS = 12;
@@ -105,6 +110,8 @@ public class DfaVisualizer {
                     edge.setLabel(symbolsLabel);
                     // Store original symbols for possible tooltips or future use
                     edge.setOriginalSymbols(symbolsList);
+                    // Mark if this is a self-loop
+                    edge.setIsLoop(sourceLabel.equals(targetLabel));
                 }
             }
         }
@@ -236,7 +243,238 @@ public class DfaVisualizer {
         graphComponent.setAntiAlias(true);
         graphComponent.setTextAntiAlias(true);
         
+        // Add tooltips for states
+        addStateTooltips(graphComponent, dfa);
+        
         return graphComponent;
+    }
+    
+    /**
+     * Adds tooltips to all states for better understanding
+     */
+    private void addStateTooltips(mxGraphComponent graphComponent, DFA dfa) {
+        // We can't use custom tooltip handlers as easily with JGraphX
+        // Instead, set a basic tooltip for the whole component that shows general info
+        
+        StringBuilder tooltip = new StringBuilder();
+        tooltip.append("<html><b>DFA Visualization</b><br>");
+        tooltip.append("Start State: ").append(dfa.getStartState().getName()).append("<br>");
+        
+        tooltip.append("Accept States: ");
+        for (DFA.State acceptState : dfa.getAcceptStates()) {
+            tooltip.append(acceptState.getName()).append(" ");
+        }
+        
+        tooltip.append("<br>");
+        tooltip.append("Total States: ").append(dfa.getStates().size()).append("<br>");
+        tooltip.append("Blue edges represent self-loops<br>");
+        tooltip.append("Grey edges represent normal transitions<br>");
+        tooltip.append("</html>");
+        
+        graphComponent.setToolTipText(tooltip.toString());
+    }
+    
+    /**
+     * Checks if a state has any self-loops
+     */
+    private boolean hasLoop(DFA dfa, DFA.State state) {
+        for (Map.Entry<DFA.StateTransition, DFA.State> entry : dfa.getTransitions().entrySet()) {
+            DFA.StateTransition transition = entry.getKey();
+            DFA.State targetState = entry.getValue();
+            
+            if (transition.getState() == state && targetState == state) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Counts outgoing transitions from a state
+     */
+    private int countOutgoingTransitions(DFA dfa, DFA.State state) {
+        int count = 0;
+        for (DFA.StateTransition transition : dfa.getTransitions().keySet()) {
+            if (transition.getState() == state) {
+                count++;
+            }
+        }
+        return count;
+    }
+    
+    /**
+     * Counts incoming transitions to a state
+     */
+    private int countIncomingTransitions(DFA dfa, DFA.State state) {
+        int count = 0;
+        for (DFA.State targetState : dfa.getTransitions().values()) {
+            if (targetState == state) {
+                count++;
+            }
+        }
+        return count;
+    }
+    
+    /**
+     * Adjusts edge label positions for better visibility.
+     */
+    private void adjustEdgeLabels(JGraphXAdapter<String, LabeledEdge> graphAdapter) {
+        // Get all edge cells
+        Object[] edges = graphAdapter.getChildCells(graphAdapter.getDefaultParent(), false, true);
+        
+        for (Object edge : edges) {
+            // Get source and target vertices for this edge
+            Object sourceVertex = graphAdapter.getModel().getTerminal(edge, true);
+            Object targetVertex = graphAdapter.getModel().getTerminal(edge, false);
+            
+            // Check if this is a self-loop
+            if (sourceVertex == targetVertex) {
+                // Adjust the self-loop to be more clearly visible
+                graphAdapter.setCellStyles(mxConstants.STYLE_LOOP, "1", new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_EDGE, "entityRelation", new Object[] { edge });
+                
+                // Add a larger offset to make the loop more visible
+                mxGeometry geometry = graphAdapter.getModel().getGeometry(edge);
+                if (geometry != null) {
+                    geometry = (mxGeometry) geometry.clone();
+                    geometry.setOffset(new mxPoint(0, -60));
+                    graphAdapter.getModel().setGeometry(edge, geometry);
+                }
+                
+                // Make self-loops more noticeable with a different color and line style
+                graphAdapter.setCellStyles(mxConstants.STYLE_STROKECOLOR, LOOP_COLOR, new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "2", new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_FONTCOLOR, LOOP_COLOR, new Object[] { edge });
+            } else {
+                // For non-loop edges
+                graphAdapter.setCellStyles(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC, new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_STROKECOLOR, NORMAL_EDGE_COLOR, new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_FONTCOLOR, NORMAL_EDGE_COLOR, new Object[] { edge });
+            }
+            
+            // Make the edge labels more readable
+            graphAdapter.setCellStyles(mxConstants.STYLE_FONTSIZE, "12", new Object[] { edge });
+            graphAdapter.setCellStyles(mxConstants.STYLE_FONTSTYLE, String.valueOf(1), new Object[] { edge });
+        }
+    }
+    
+    /**
+     * Sets up the visual style of the graph, such as colors and shapes for states.
+     */
+    private void setupGraphStyle(JGraphXAdapter<String, LabeledEdge> graphAdapter, DFA dfa) {
+        // Get the stylesheet for customization
+        mxStylesheet stylesheet = graphAdapter.getStylesheet();
+        
+        // Base style for all states (vertices)
+        Map<String, Object> vertexStyle = new HashMap<>();
+        vertexStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_ELLIPSE);
+        vertexStyle.put(mxConstants.STYLE_PERIMETER, mxConstants.PERIMETER_ELLIPSE);
+        vertexStyle.put(mxConstants.STYLE_FONTSIZE, "14"); // Slightly larger font
+        vertexStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
+        vertexStyle.put(mxConstants.STYLE_FILLCOLOR, STATE_COLORS[0]); // Default state color
+        vertexStyle.put(mxConstants.STYLE_STROKECOLOR, "#444444"); // Darker border
+        vertexStyle.put(mxConstants.STYLE_STROKEWIDTH, "1.5");
+        vertexStyle.put(mxConstants.STYLE_SHADOW, true);
+        vertexStyle.put(mxConstants.STYLE_ROUNDED, true);
+        vertexStyle.put(mxConstants.STYLE_VERTICAL_ALIGN, mxConstants.ALIGN_MIDDLE);
+        vertexStyle.put(mxConstants.STYLE_VERTICAL_LABEL_POSITION, mxConstants.ALIGN_MIDDLE);
+        vertexStyle.put(mxConstants.STYLE_SPACING, "10");
+        
+        stylesheet.putCellStyle("VERTEX", vertexStyle);
+        
+        // Start state style
+        Map<String, Object> startStyle = new HashMap<>(vertexStyle);
+        startStyle.put(mxConstants.STYLE_STROKECOLOR, "#008800"); // Darker green
+        startStyle.put(mxConstants.STYLE_STROKEWIDTH, "3");
+        startStyle.put(mxConstants.STYLE_FILLCOLOR, STATE_COLORS[2]); // Green for start states
+        stylesheet.putCellStyle("START", startStyle);
+        
+        // Accept state style
+        Map<String, Object> acceptStyle = new HashMap<>(vertexStyle);
+        acceptStyle.put(mxConstants.STYLE_DASHED, false);
+        acceptStyle.put(mxConstants.STYLE_STROKEWIDTH, "3");
+        acceptStyle.put(mxConstants.STYLE_FILLCOLOR, STATE_COLORS[1]); // Orange for accept states
+        stylesheet.putCellStyle("ACCEPT", acceptStyle);
+        
+        // Start+Accept state style
+        Map<String, Object> startAcceptStyle = new HashMap<>(vertexStyle);
+        startAcceptStyle.put(mxConstants.STYLE_STROKECOLOR, "#008800"); // Darker green
+        startAcceptStyle.put(mxConstants.STYLE_STROKEWIDTH, "3");
+        startAcceptStyle.put(mxConstants.STYLE_FILLCOLOR, "#FFD6A5"); // Blend of green and orange
+        startAcceptStyle.put(mxConstants.STYLE_DASHED, false);
+        stylesheet.putCellStyle("START_ACCEPT", startAcceptStyle);
+        
+        // Edge style
+        Map<String, Object> edgeStyle = new HashMap<>();
+        edgeStyle.put(mxConstants.STYLE_ROUNDED, true);
+        edgeStyle.put(mxConstants.STYLE_ORTHOGONAL, false);
+        edgeStyle.put(mxConstants.STYLE_EDGE, "elbowConnector");
+        edgeStyle.put(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC);
+        edgeStyle.put(mxConstants.STYLE_STROKECOLOR, NORMAL_EDGE_COLOR);
+        edgeStyle.put(mxConstants.STYLE_STROKEWIDTH, "1.5");
+        edgeStyle.put(mxConstants.STYLE_FONTCOLOR, NORMAL_EDGE_COLOR);
+        edgeStyle.put(mxConstants.STYLE_LABEL_BACKGROUNDCOLOR, "#FFFFFF");
+        edgeStyle.put(mxConstants.STYLE_FONTSIZE, "12");
+        
+        stylesheet.putCellStyle("EDGE", edgeStyle);
+        
+        // Special style for self-loops
+        Map<String, Object> loopStyle = new HashMap<>(edgeStyle);
+        loopStyle.put(mxConstants.STYLE_EDGE, "entityRelation");
+        loopStyle.put(mxConstants.STYLE_STROKECOLOR, LOOP_COLOR);
+        loopStyle.put(mxConstants.STYLE_FONTCOLOR, LOOP_COLOR);
+        loopStyle.put(mxConstants.STYLE_STROKEWIDTH, "2");
+        loopStyle.put(mxConstants.STYLE_LOOP, "1");
+        
+        stylesheet.putCellStyle("LOOP", loopStyle);
+        
+        // Apply vertex styles according to state type
+        // Get the mapping from vertex names to cells
+        Map<String, Object> vertexToCellMap = new HashMap<>();
+        for (String key : graphAdapter.getVertexToCellMap().keySet()) {
+            vertexToCellMap.put(key, graphAdapter.getVertexToCellMap().get(key));
+        }
+        
+        for (Map.Entry<String, Object> entry : vertexToCellMap.entrySet()) {
+            String vertexName = entry.getKey();
+            Object cell = entry.getValue();
+            
+            DFA.State state = findStateByName(dfa, vertexName);
+            
+            if (state != null) {
+                boolean isStart = (dfa.getStartState() == state);
+                boolean isAccept = dfa.getAcceptStates().contains(state);
+                
+                if (isStart && isAccept) {
+                    graphAdapter.setCellStyle("START_ACCEPT", new Object[] { cell });
+                } else if (isStart) {
+                    graphAdapter.setCellStyle("START", new Object[] { cell });
+                } else if (isAccept) {
+                    graphAdapter.setCellStyle("ACCEPT", new Object[] { cell });
+                } else {
+                    graphAdapter.setCellStyle("VERTEX", new Object[] { cell });
+                }
+            }
+        }
+        
+        // Apply edge styles
+        Map<LabeledEdge, Object> edgeToCellMap = new HashMap<>();
+        for (LabeledEdge key : graphAdapter.getEdgeToCellMap().keySet()) {
+            edgeToCellMap.put(key, graphAdapter.getEdgeToCellMap().get(key));
+        }
+        
+        for (Map.Entry<LabeledEdge, Object> entry : edgeToCellMap.entrySet()) {
+            LabeledEdge edge = entry.getKey();
+            Object cell = entry.getValue();
+            
+            // Check if this is a loop edge
+            if (edge.isLoop()) {
+                graphAdapter.setCellStyle("LOOP", new Object[] { cell });
+            } else {
+                graphAdapter.setCellStyle("EDGE", new Object[] { cell });
+            }
+        }
     }
     
     /**
@@ -315,236 +553,24 @@ public class DfaVisualizer {
     }
     
     /**
-     * Adjusts edge label positions for better visibility.
-     */
-    private void adjustEdgeLabels(JGraphXAdapter<String, LabeledEdge> graphAdapter) {
-        Object[] edges = graphAdapter.getEdgeToCellMap().values().toArray();
-        for (Object edge : edges) {
-            // Adjust geometry to move label away from line
-            mxGeometry geometry = graphAdapter.getModel().getGeometry(edge);
-            if (geometry != null) {
-                geometry = (mxGeometry) geometry.clone();
-                
-                // For self-loops, position them based on their location in the graph
-                if (graphAdapter.getModel().getTerminal(edge, true) == 
-                    graphAdapter.getModel().getTerminal(edge, false)) {
-                    
-                    // Get the state cell's geometry to determine its position in the graph
-                    Object stateCell = graphAdapter.getModel().getTerminal(edge, true);
-                    mxGeometry stateGeometry = graphAdapter.getModel().getGeometry(stateCell);
-                    
-                    if (stateGeometry != null) {
-                        // Position self-loops differently based on location
-                        double centerX = graphAdapter.getView().getGraphBounds().getCenterX();
-                        double centerY = graphAdapter.getView().getGraphBounds().getCenterY();
-                        
-                        // Determine which quadrant the state is in relative to center
-                        boolean isLeft = stateGeometry.getCenterX() < centerX;
-                        boolean isTop = stateGeometry.getCenterY() < centerY;
-                        
-                        // Choose loop direction based on quadrant
-                        if (isLeft && isTop) {
-                            // Top-left quadrant: loop to the northwest
-                            geometry.setOffset(new mxPoint(-30, -30));
-                        } else if (!isLeft && isTop) {
-                            // Top-right quadrant: loop to the northeast
-                            geometry.setOffset(new mxPoint(30, -30));
-                        } else if (isLeft && !isTop) {
-                            // Bottom-left quadrant: loop to the southwest
-                            geometry.setOffset(new mxPoint(-30, 30));
-                        } else {
-                            // Bottom-right quadrant: loop to the southeast
-                            geometry.setOffset(new mxPoint(30, 30));
-                        }
-                    } else {
-                        // Fallback to a default offset
-                        geometry.setOffset(new mxPoint(0, -30));
-                    }
-                } else {
-                    // Better position for standard edges
-                    geometry.setOffset(new mxPoint(0, -10));
-                }
-                
-                graphAdapter.getModel().setGeometry(edge, geometry);
-            }
-        }
-    }
-    
-    /**
-     * Sets up the visual style of the graph, such as colors and shapes for states.
-     */
-    private void setupGraphStyle(JGraphXAdapter<String, LabeledEdge> graphAdapter, DFA dfa) {
-        mxStylesheet stylesheet = graphAdapter.getStylesheet();
-        
-        // Style for regular states
-        Map<String, Object> vertexStyle = new HashMap<>();
-        vertexStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_ELLIPSE);
-        vertexStyle.put(mxConstants.STYLE_PERIMETER, mxConstants.PERIMETER_ELLIPSE);
-        vertexStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
-        vertexStyle.put(mxConstants.STYLE_FILLCOLOR, "#FFFFFF");
-        vertexStyle.put(mxConstants.STYLE_STROKECOLOR, "#2C3E50");
-        vertexStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
-        vertexStyle.put(mxConstants.STYLE_FONTSIZE, 16);
-        vertexStyle.put(mxConstants.STYLE_FONTFAMILY, "Arial");
-        vertexStyle.put(mxConstants.STYLE_FONTSTYLE, mxConstants.FONT_BOLD);
-        vertexStyle.put(mxConstants.STYLE_VERTICAL_ALIGN, mxConstants.ALIGN_MIDDLE);
-        vertexStyle.put(mxConstants.STYLE_ALIGN, mxConstants.ALIGN_CENTER);
-        vertexStyle.put(mxConstants.STYLE_SHADOW, true);
-        vertexStyle.put(mxConstants.STYLE_ROUNDED, true);
-        vertexStyle.put(mxConstants.STYLE_OPACITY, 90);
-        vertexStyle.put(mxConstants.STYLE_VERTICAL_LABEL_POSITION, mxConstants.ALIGN_MIDDLE);
-        vertexStyle.put(mxConstants.STYLE_SPACING, 10);
-        
-        // Set fixed size for states using custom properties
-        vertexStyle.put("width", STATE_SIZE);
-        vertexStyle.put("height", STATE_SIZE);
-        
-        // Style for start state
-        Map<String, Object> startStyle = new HashMap<>(vertexStyle);
-        startStyle.put(mxConstants.STYLE_FILLCOLOR, "#82E0AA"); // Light green
-        startStyle.put(mxConstants.STYLE_STROKECOLOR, "#186A3B"); // Dark green
-        startStyle.put(mxConstants.STYLE_FONTCOLOR, "#196F3D");
-        
-        // Style for accept states - thicker border and a distinctive pattern
-        Map<String, Object> acceptStyle = new HashMap<>(vertexStyle);
-        acceptStyle.put(mxConstants.STYLE_STROKEWIDTH, 4);
-        acceptStyle.put(mxConstants.STYLE_STROKECOLOR, "#5D6D7E");
-        acceptStyle.put(mxConstants.STYLE_FILLCOLOR, "#D5F5E3");
-        acceptStyle.put(mxConstants.STYLE_DASHED, false);
-        
-        // Style for start-accept states
-        Map<String, Object> startAcceptStyle = new HashMap<>(acceptStyle);
-        startAcceptStyle.put(mxConstants.STYLE_FILLCOLOR, "#82E0AA"); // Light green
-        startAcceptStyle.put(mxConstants.STYLE_STROKECOLOR, "#1E8449"); // Darker green
-        startAcceptStyle.put(mxConstants.STYLE_FONTCOLOR, "#196F3D");
-        
-        // Style for transitions
-        Map<String, Object> edgeStyle = new HashMap<>();
-        edgeStyle.put(mxConstants.STYLE_ROUNDED, true);
-        edgeStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_CONNECTOR);
-        edgeStyle.put(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC);
-        edgeStyle.put(mxConstants.STYLE_STROKECOLOR, "#2C3E50");
-        edgeStyle.put(mxConstants.STYLE_FONTCOLOR, "#2C3E50");
-        edgeStyle.put(mxConstants.STYLE_FONTFAMILY, "Arial");
-        edgeStyle.put(mxConstants.STYLE_FONTSIZE, 14);
-        edgeStyle.put(mxConstants.STYLE_FONTSTYLE, mxConstants.FONT_BOLD);
-        edgeStyle.put(mxConstants.STYLE_ALIGN, mxConstants.ALIGN_CENTER);
-        edgeStyle.put(mxConstants.STYLE_VERTICAL_ALIGN, mxConstants.ALIGN_BOTTOM);
-        edgeStyle.put(mxConstants.STYLE_LABEL_BACKGROUNDCOLOR, "#FFFFFF");
-        edgeStyle.put(mxConstants.STYLE_LABEL_POSITION, mxConstants.ALIGN_CENTER);
-        edgeStyle.put("labelBorderColor", "#E5E7E9"); // Custom property
-        edgeStyle.put(mxConstants.STYLE_STROKEWIDTH, 1.5);
-        
-        // Enhanced style for self-loop edges - make them more distinctive
-        Map<String, Object> loopStyle = new HashMap<>(edgeStyle);
-        loopStyle.put(mxConstants.STYLE_EDGE, mxEdgeStyle.Loop);
-        loopStyle.put(mxConstants.STYLE_LOOP, mxConstants.DIRECTION_WEST);
-        loopStyle.put(mxConstants.STYLE_LABEL_POSITION, mxConstants.ALIGN_LEFT);
-        loopStyle.put(mxConstants.STYLE_FONTCOLOR, "#1A5276");
-        loopStyle.put(mxConstants.STYLE_STROKECOLOR, "#3498DB"); // Brighter blue
-        loopStyle.put(mxConstants.STYLE_STROKEWIDTH, 2.5); // Thicker line
-        loopStyle.put(mxConstants.STYLE_LABEL_BACKGROUNDCOLOR, "#EBF5FB"); // Light blue background
-        loopStyle.put(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_OPEN); // Different arrow style
-        
-        // Register the styles
-        stylesheet.putCellStyle("VERTEX", vertexStyle);
-        stylesheet.putCellStyle("START", startStyle);
-        stylesheet.putCellStyle("ACCEPT", acceptStyle);
-        stylesheet.putCellStyle("START_ACCEPT", startAcceptStyle);
-        stylesheet.putCellStyle("EDGE", edgeStyle);
-        stylesheet.putCellStyle("LOOP", loopStyle);
-        
-        // Apply different colors to states for better visual distinction
-        int colorIndex = 0;
-        Map<String, Integer> stateColorMap = new HashMap<>();
-        
-        // Apply styles to vertices and edges
-        Object[] vertices = graphAdapter.getVertexToCellMap().values().toArray();
-        for (Object cell : vertices) {
-            String stateName = graphAdapter.getVertexToCellMap().entrySet().stream()
-                .filter(entry -> entry.getValue().equals(cell))
-                .map(Map.Entry::getKey)
-                .findFirst()
-                .orElse("");
-            
-            boolean isStart = dfa.getStartState() != null && 
-                              dfa.getStartState().getName().equals(stateName);
-            boolean isAccept = dfa.getAcceptStates().stream()
-                .anyMatch(state -> state.getName().equals(stateName));
-            
-            String styleName;
-            if (isStart && isAccept) {
-                styleName = "START_ACCEPT";
-            } else if (isStart) {
-                styleName = "START";
-            } else if (isAccept) {
-                styleName = "ACCEPT";
-            } else {
-                // Assign a consistent color to this state
-                if (!stateColorMap.containsKey(stateName)) {
-                    stateColorMap.put(stateName, colorIndex % STATE_COLORS.length);
-                    colorIndex++;
-                }
-                
-                // Create a custom style with a unique color
-                int stateColor = stateColorMap.get(stateName);
-                Map<String, Object> customStyle = new HashMap<>(vertexStyle);
-                customStyle.put(mxConstants.STYLE_FILLCOLOR, STATE_COLORS[stateColor]);
-                
-                // Add the custom style
-                String customStyleName = "VERTEX_" + stateColor;
-                stylesheet.putCellStyle(customStyleName, customStyle);
-                styleName = customStyleName;
-            }
-            
-            graphAdapter.setCellStyle(styleName, new Object[] { cell });
-        }
-        
-        // Apply style to edges
-        Object[] edges = graphAdapter.getEdgeToCellMap().values().toArray();
-        for (Object cell : edges) {
-            // Check if it's a self-loop
-            if (graphAdapter.getModel().getTerminal(cell, true) == 
-                graphAdapter.getModel().getTerminal(cell, false)) {
-                graphAdapter.setCellStyle("LOOP", new Object[] { cell });
-                
-                // Try to add a special "star" decoration to indicate Kleene star
-                String edgeLabel = graphAdapter.getModel().getValue(cell).toString();
-                if (edgeLabel.length() > 0) {
-                    Object stateCell = graphAdapter.getModel().getTerminal(cell, true);
-                    String stateName = graphAdapter.getModel().getValue(stateCell).toString();
-                    
-                    // Create a "★" indicator for self-loops to show Kleene star operation
-                    if (hasKleeneStar(dfa, stateName, edgeLabel.charAt(0))) {
-                        // This is a loop coming from a Kleene star in the regex
-                        graphAdapter.getModel().setValue(cell, edgeLabel + " ★");
-                    }
-                }
-            } else {
-                graphAdapter.setCellStyle("EDGE", new Object[] { cell });
-            }
-        }
-    }
-    
-    /**
-     * Detects if this self-loop is likely from a Kleene star operation
-     * This is a heuristic and might not be perfect for all DFAs
+     * Checks if a state has a Kleene star (self-loop)
      */
     private boolean hasKleeneStar(DFA dfa, String stateName, char symbol) {
-        // In a minimized DFA, a state with a self-loop might be part of a Kleene star
-        // This is just a heuristic - a more accurate approach would require tracking
-        // the regex → NFA → DFA conversion process
+        DFA.State state = findStateByName(dfa, stateName);
+        if (state == null) {
+            return false;
+        }
         
-        // For now, let's assume any state with a self-loop is likely from a Kleene star
-        return true;
+        DFA.StateTransition transition = new DFA.StateTransition(state, symbol);
+        DFA.State targetState = dfa.getTransitions().get(transition);
+        
+        return targetState == state;
     }
     
-    /**
-     * Custom edge class that can hold a label.
-     */
     public static class LabeledEdge extends DefaultEdge {
         private String label = "";
         private List<Character> originalSymbols;
+        private boolean isLoop = false;
         
         public void setLabel(String label) {
             this.label = label;
@@ -560,6 +586,14 @@ public class DfaVisualizer {
         
         public List<Character> getOriginalSymbols() {
             return originalSymbols;
+        }
+        
+        public boolean isLoop() {
+            return isLoop;
+        }
+        
+        public void setIsLoop(boolean isLoop) {
+            this.isLoop = isLoop;
         }
         
         @Override
