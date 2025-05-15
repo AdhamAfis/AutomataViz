@@ -1,6 +1,17 @@
 package com.dfavisualizer;
 
+import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -8,7 +19,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.swing.BorderFactory;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 
 import org.jgrapht.ext.JGraphXAdapter;
@@ -43,6 +57,30 @@ public class NfaVisualizer {
     private static final String LOOP_COLOR = "#6666FF"; // Blue for loops
     private static final String NORMAL_EDGE_COLOR = "#666666"; // Dark gray for normal edges
     private static final String EPSILON_COLOR = "#FF6666"; // Red for epsilon transitions
+    
+    // Grid settings
+    private static final int GRID_SIZE = 20; // Size of grid cells in pixels
+    
+    // Control flags
+    private boolean gridSnap = false; // Grid snap enabled/disabled
+    
+    /**
+     * Sets whether to enable grid snapping for states.
+     * 
+     * @param enabled true to enable grid snapping, false to disable it
+     */
+    public void setGridSnap(boolean enabled) {
+        this.gridSnap = enabled;
+    }
+    
+    /**
+     * Gets whether grid snapping is enabled.
+     * 
+     * @return true if grid snapping is enabled, false otherwise
+     */
+    public boolean isGridSnap() {
+        return gridSnap;
+    }
 
     /**
      * Creates a graphical visualization of the NFA.
@@ -209,22 +247,193 @@ public class NfaVisualizer {
         graphComponent.getGraph().setAllowDanglingEdges(false);
         graphComponent.getGraph().setEdgeLabelsMovable(false);
         graphComponent.getGraph().setCellsEditable(false);
-        graphComponent.getGraph().setCellsLocked(true);
+        
+        // Enable cells to be movable and selectable for better interaction
+        graphComponent.getGraph().setCellsLocked(false);
+        graphComponent.getGraph().setCellsMovable(true);
+        graphComponent.getGraph().setCellsSelectable(true);
         graphComponent.getGraph().setCellsResizable(false);
-        graphComponent.getGraph().setCellsSelectable(false);
+        
+        // Enable grid functionality but keep it hidden by default
+        graphComponent.setGridVisible(gridSnap);
+        graphComponent.getGraph().setGridSize(GRID_SIZE);
+        graphComponent.getGraph().setGridEnabled(gridSnap);
+        
+        // Improve drag behavior
+        graphComponent.setPanning(true);
+        graphComponent.setAutoScroll(true);
+        graphComponent.setCenterPage(true);
+        graphComponent.setCenterZoom(true);
+        
         graphComponent.setToolTips(true);
         graphComponent.setBorder(null);
         graphComponent.getViewport().setOpaque(true);
-        graphComponent.getViewport().setBackground(new Color(250, 250, 250)); // Very light gray
+        graphComponent.getViewport().setBackground(new Color(252, 252, 252)); // Very light gray
         
         // Enable antialiasing for smoother graphics
         graphComponent.setAntiAlias(true);
         graphComponent.setTextAntiAlias(true);
         
-        // Add tooltip with general information
+        // Make the component capture key events for shortcuts
+        graphComponent.setFocusable(true);
+        
+        // Add tooltips for states
         addNfaTooltip(graphComponent, nfa);
         
+        // Create and configure the minimap navigation
+        configureMinimapNavigation(graphComponent);
+        
         return graphComponent;
+    }
+    
+    /**
+     * Configures the minimap navigation for the graph component
+     */
+    private void configureMinimapNavigation(mxGraphComponent graphComponent) {
+        // Create a custom minimap panel
+        JPanel minimapPanel = new JPanel(new BorderLayout());
+        minimapPanel.setBackground(new Color(240, 240, 240));
+        minimapPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createEmptyBorder(5, 5, 5, 5),
+            BorderFactory.createLineBorder(Color.GRAY)
+        ));
+        
+        // Create a custom minimap component that shows a simplified view of the graph
+        JPanel minimap = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                
+                // Fill the background
+                g2d.setColor(new Color(252, 252, 252));
+                g2d.fillRect(0, 0, getWidth(), getHeight());
+                
+                // Get the graph bounds
+                Rectangle graphBounds = graphComponent.getGraphControl().getBounds();
+                
+                // If graph has no size yet, just return
+                if (graphBounds.width <= 0 || graphBounds.height <= 0) {
+                    g2d.dispose();
+                    return;
+                }
+                
+                // Calculate scale to fit in minimap
+                double scaleX = (double) getWidth() / graphBounds.width;
+                double scaleY = (double) getHeight() / graphBounds.height;
+                double scale = Math.min(scaleX, scaleY) * 0.9; // 90% to add some margin
+                
+                // Draw a simplified representation of the states
+                g2d.setColor(new Color(230, 230, 255)); // Light purple for NFA states
+                
+                // Draw all child vertices (states) scaled to fit the minimap
+                Object[] vertices = graphComponent.getGraph().getChildVertices(graphComponent.getGraph().getDefaultParent());
+                for (Object vertex : vertices) {
+                    mxGeometry geo = graphComponent.getGraph().getCellGeometry(vertex);
+                    if (geo != null) {
+                        double x = geo.getX() * scale;
+                        double y = geo.getY() * scale;
+                        double width = geo.getWidth() * scale;
+                        double height = geo.getHeight() * scale;
+                        
+                        g2d.fillOval((int) x, (int) y, (int) width, (int) height);
+                    }
+                }
+                
+                // Draw the current viewport as a rectangle
+                Rectangle viewRect = graphComponent.getViewport().getViewRect();
+                g2d.setColor(new Color(255, 0, 0, 100)); // Semi-transparent red
+                
+                // Scale the view rectangle to match the minimap scale
+                int viewX = (int) (viewRect.x * scale);
+                int viewY = (int) (viewRect.y * scale);
+                int viewWidth = (int) (viewRect.width * scale);
+                int viewHeight = (int) (viewRect.height * scale);
+                
+                g2d.drawRect(viewX, viewY, viewWidth, viewHeight);
+                g2d.setColor(new Color(255, 0, 0, 30)); // Very transparent red
+                g2d.fillRect(viewX, viewY, viewWidth, viewHeight);
+                
+                g2d.dispose();
+            }
+        };
+        
+        minimap.setPreferredSize(new Dimension(150, 120));
+        minimapPanel.add(minimap, BorderLayout.CENTER);
+        
+        // Add a title for the minimap
+        JLabel minimapTitle = new JLabel("Overview", JLabel.CENTER);
+        minimapTitle.setFont(minimapTitle.getFont().deriveFont(10.0f));
+        minimapTitle.setForeground(Color.DARK_GRAY);
+        minimapPanel.add(minimapTitle, BorderLayout.NORTH);
+        
+        // Add mouse listener to allow clicking on the minimap to navigate
+        minimap.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                // Get the graph bounds
+                Rectangle graphBounds = graphComponent.getGraphControl().getBounds();
+                
+                // Calculate scale
+                double scaleX = (double) minimap.getWidth() / graphBounds.width;
+                double scaleY = (double) minimap.getHeight() / graphBounds.height;
+                double scale = Math.min(scaleX, scaleY) * 0.9;
+                
+                // Calculate the graph position to center on
+                int graphX = (int) (e.getX() / scale);
+                int graphY = (int) (e.getY() / scale);
+                
+                // Center the viewport on this position
+                Rectangle viewRect = graphComponent.getViewport().getViewRect();
+                graphComponent.getViewport().setViewPosition(new Point(
+                    Math.max(0, graphX - viewRect.width / 2),
+                    Math.max(0, graphY - viewRect.height / 2)
+                ));
+                
+                // Request focus to the graph component after navigation
+                graphComponent.requestFocusInWindow();
+            }
+        });
+        
+        // Register for viewport changes to update the minimap
+        graphComponent.getViewport().addChangeListener(e -> minimap.repaint());
+        
+        // Create a floating panel in the bottom-right corner
+        JPanel glassPane = new JPanel(null); // Use null layout for absolute positioning
+        glassPane.setOpaque(false);
+        
+        glassPane.add(minimapPanel);
+        
+        // Position the minimap in the bottom right corner
+        minimapPanel.setBounds(
+            graphComponent.getWidth() - 170,
+            graphComponent.getHeight() - 150,
+            160,
+            140
+        );
+        
+        // Update minimap position when the graph component is resized
+        graphComponent.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                minimapPanel.setBounds(
+                    graphComponent.getWidth() - 170,
+                    graphComponent.getHeight() - 150,
+                    160,
+                    140
+                );
+                minimap.repaint();
+            }
+        });
+        
+        // Add the glass pane to the graph component
+        graphComponent.add(glassPane);
+        glassPane.setVisible(true);
+        
+        // Force initial paint of the minimap
+        minimap.repaint();
     }
     
     /**

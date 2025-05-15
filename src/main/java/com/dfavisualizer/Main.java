@@ -72,6 +72,7 @@ public class Main {
     private JCheckBox minimizeDfaCheckbox; // Checkbox for DFA minimization
     private JCheckBox minimizeNfaCheckbox; // New checkbox for NFA minimization
     private JCheckBox showDeadStatesCheckbox; // Checkbox for showing dead states
+    private JCheckBox gridSnapCheckbox; // Checkbox for grid snap
     private double zoomFactor = 1.0;
     private DfaMinimizer minimizer; // Direct reference to minimizer
     private NfaMinimizer nfaMinimizer; // New reference to NFA minimizer
@@ -132,6 +133,39 @@ public class Main {
         showDeadStatesCheckbox.setSelected(true);
         showDeadStatesCheckbox.setToolTipText("Highlight states that cannot reach an accept state");
         buttonPanel.add(showDeadStatesCheckbox);
+        
+        // Add checkbox for grid snap
+        gridSnapCheckbox = new JCheckBox("Grid Snap");
+        gridSnapCheckbox.setSelected(false);
+        gridSnapCheckbox.setToolTipText("Snap states to grid when moving them");
+        gridSnapCheckbox.addActionListener(e -> {
+            // Update grid snap setting in both visualizers
+            boolean enableGridSnap = gridSnapCheckbox.isSelected();
+            dfaVisualizer.setGridSnap(enableGridSnap);
+            nfaVisualizer.setGridSnap(enableGridSnap);
+            
+            // Update any current visualizations
+            JComponent dfaComponent = (JComponent) dfaPanel.getClientProperty("visualComponent");
+            if (dfaComponent instanceof mxGraphComponent) {
+                ((mxGraphComponent) dfaComponent).setGridVisible(enableGridSnap);
+                // Configure grid size and enable snapping
+                if (enableGridSnap) {
+                    ((mxGraphComponent) dfaComponent).getGraph().setGridSize(20);
+                    ((mxGraphComponent) dfaComponent).getGraph().setGridEnabled(true);
+                }
+            }
+            
+            JComponent nfaComponent = (JComponent) nfaPanel.getClientProperty("visualComponent");
+            if (nfaComponent instanceof mxGraphComponent) {
+                ((mxGraphComponent) nfaComponent).setGridVisible(enableGridSnap);
+                // Configure grid size and enable snapping
+                if (enableGridSnap) {
+                    ((mxGraphComponent) nfaComponent).getGraph().setGridSize(20);
+                    ((mxGraphComponent) nfaComponent).getGraph().setGridEnabled(true);
+                }
+            }
+        });
+        buttonPanel.add(gridSnapCheckbox);
         
         JButton visualizeButton = new JButton("Visualize DFA");
         visualizeButton.addActionListener(this::visualizeDfa);
