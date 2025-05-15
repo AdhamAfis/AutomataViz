@@ -38,6 +38,7 @@ import com.mxgraph.model.mxGeometry;
 import com.mxgraph.swing.mxGraphComponent;
 import com.mxgraph.util.mxConstants;
 import com.mxgraph.util.mxPoint;
+import com.mxgraph.view.mxGraph;
 import com.mxgraph.view.mxStylesheet;
 
 /**
@@ -75,6 +76,8 @@ public class DfaVisualizer {
     private boolean highlightDeadStates = true;
     private boolean gridSnap = false; // Grid snap enabled/disabled
 
+    private mxGraphComponent lastGraphComponent;
+
     /**
      * Sets whether to highlight dead states in the visualization.
      * 
@@ -89,7 +92,7 @@ public class DfaVisualizer {
      * 
      * @param enabled true to enable grid snapping, false to disable it
      */
-    public void setGridSnap(boolean enabled) {
+    public void setGridSnapEnabled(boolean enabled) {
         this.gridSnap = enabled;
     }
     
@@ -191,6 +194,9 @@ public class DfaVisualizer {
         
         // Create a component with the visualization
         mxGraphComponent graphComponent = createGraphComponent(graphAdapter, dfa);
+        
+        // Store the reference to the most recently created graph component
+        lastGraphComponent = graphComponent;
         
         return graphComponent;
     }
@@ -295,10 +301,16 @@ public class DfaVisualizer {
         graphComponent.getGraph().setCellsSelectable(true);
         graphComponent.getGraph().setCellsResizable(false);
         
-        // Enable grid functionality but keep it hidden by default
+        // Enable grid functionality but keep it hidden by default unless grid snap is enabled
         graphComponent.setGridVisible(gridSnap);
         graphComponent.getGraph().setGridSize(GRID_SIZE);
         graphComponent.getGraph().setGridEnabled(gridSnap);
+        
+        // Configure grid appearance for better visibility
+        if (gridSnap) {
+            graphComponent.setGridStyle(mxGraphComponent.GRID_STYLE_LINE);
+            graphComponent.setGridColor(new Color(220, 220, 220));
+        }
         
         // Improve drag behavior
         graphComponent.setPanning(true);
@@ -1059,6 +1071,77 @@ public class DfaVisualizer {
             graphAdapter.setCellStyles(mxConstants.STYLE_MOVABLE, "0", new Object[] { badge });
             graphAdapter.setCellStyles(mxConstants.STYLE_RESIZABLE, "0", new Object[] { badge });
             graphAdapter.setCellStyles(mxConstants.STYLE_EDITABLE, "0", new Object[] { badge });
+        }
+    }
+    
+    /**
+     * Resets all cell styles to their default values in the most recent graph.
+     * Used to clear any animation or highlighting effects.
+     */
+    public void resetAllStyles() {
+        // TODO: Implement this
+    }
+    
+    /**
+     * Reset the style of a cell
+     * 
+     * @param graph The graph
+     * @param cell The cell to reset
+     */
+    private void resetCellStyle(mxGraph graph, Object cell) {
+        if (graph.getModel().isVertex(cell)) {
+            // Reset vertex styling to default
+            graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, "#E6F2FF", new Object[] { cell });
+            graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#444444", new Object[] { cell });
+            graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "1.5", new Object[] { cell });
+            
+            // Check if this is a special state that needs different styling
+            String cellValue = graph.getModel().getValue(cell).toString();
+            
+            // Handle accept states (if we can determine them)
+            if (graph.getCellStyle(cell).containsKey("ACCEPT") || 
+                graph.getCellStyle(cell).containsKey("START_ACCEPT")) {
+                graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, STATE_COLORS[1], new Object[] { cell });
+                graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "3", new Object[] { cell });
+            }
+            
+            // Handle start states
+            if (graph.getCellStyle(cell).containsKey("START") ||
+                graph.getCellStyle(cell).containsKey("START_ACCEPT")) {
+                graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#008800", new Object[] { cell });
+                graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "3", new Object[] { cell });
+            }
+            
+            // Handle dead states if highlighting is enabled
+            if (highlightDeadStates && 
+                (graph.getCellStyle(cell).containsKey("DEAD") ||
+                 graph.getCellStyle(cell).containsKey("DEAD_START"))) {
+                graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, DEAD_STATE_BORDER_COLOR, new Object[] { cell });
+                graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, STATE_COLORS[5], new Object[] { cell });
+                graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "3", new Object[] { cell });
+                graph.setCellStyles(mxConstants.STYLE_DASHED, "1", new Object[] { cell });
+            }
+            
+        } else if (graph.getModel().isEdge(cell)) {
+            // Reset edge styling based on whether it's a loop or normal edge
+            boolean isLoop = false;
+            
+            // Try to determine if this is a loop edge
+            if (graph.getModel().getTerminal(cell, true) == graph.getModel().getTerminal(cell, false)) {
+                isLoop = true;
+            }
+            
+            if (isLoop) {
+                graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, LOOP_COLOR, new Object[] { cell });
+                graph.setCellStyles(mxConstants.STYLE_FONTCOLOR, LOOP_COLOR, new Object[] { cell });
+                graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "2", new Object[] { cell });
+            } else {
+                graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, NORMAL_EDGE_COLOR, new Object[] { cell });
+                graph.setCellStyles(mxConstants.STYLE_FONTCOLOR, NORMAL_EDGE_COLOR, new Object[] { cell });
+                graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "1.5", new Object[] { cell });
+            }
+            
+            graph.setCellStyles(mxConstants.STYLE_FONTSIZE, "12", new Object[] { cell });
         }
     }
     
