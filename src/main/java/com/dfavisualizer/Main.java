@@ -66,21 +66,26 @@ public class Main {
     private JTextArea statusArea;
     private DFA currentDfa;
     private DFA nonMinimizedDfa; // Store the non-minimized DFA
+    private NFA currentNfa; // Store the current NFA
+    private NFA minimizedNfa; // Store the minimized NFA
     private JCheckBox splitViewCheckbox;
-    private JCheckBox minimizeDfaCheckbox; // New checkbox for DFA minimization
-    private JCheckBox showDeadStatesCheckbox; // New checkbox for showing dead states
+    private JCheckBox minimizeDfaCheckbox; // Checkbox for DFA minimization
+    private JCheckBox minimizeNfaCheckbox; // New checkbox for NFA minimization
+    private JCheckBox showDeadStatesCheckbox; // Checkbox for showing dead states
     private double zoomFactor = 1.0;
     private DfaMinimizer minimizer; // Direct reference to minimizer
+    private NfaMinimizer nfaMinimizer; // New reference to NFA minimizer
     private JButton animateButton;
     private boolean animationInProgress = false;
     private ScheduledExecutorService animationExecutor;
-    private JPanel legendPanel; // New panel to display the legend
+    private JPanel legendPanel; // Panel to display the legend
 
     public Main() {
         converter = new RegexToDfaConverter();
         dfaVisualizer = new DfaVisualizer();
         nfaVisualizer = new NfaVisualizer();
         minimizer = new DfaMinimizer(); // Initialize minimizer
+        nfaMinimizer = new NfaMinimizer(); // Initialize NFA minimizer
         initializeUI();
     }
 
@@ -116,6 +121,12 @@ public class Main {
         minimizeDfaCheckbox.setToolTipText("Apply Hopcroft's algorithm to minimize the DFA");
         buttonPanel.add(minimizeDfaCheckbox);
         
+        // Add checkbox for NFA minimization
+        minimizeNfaCheckbox = new JCheckBox("Minimize NFA");
+        minimizeNfaCheckbox.setSelected(true);
+        minimizeNfaCheckbox.setToolTipText("Apply Hopcroft's algorithm to minimize the NFA");
+        buttonPanel.add(minimizeNfaCheckbox);
+        
         // Add checkbox for showing dead states
         showDeadStatesCheckbox = new JCheckBox("Highlight Dead States");
         showDeadStatesCheckbox.setSelected(true);
@@ -129,6 +140,36 @@ public class Main {
         JButton debugButton = new JButton("Debug");
         debugButton.addActionListener(this::debugRegex);
         buttonPanel.add(debugButton);
+        
+        // Add a global export button as well
+        JButton exportAllButton = new JButton("Export");
+        exportAllButton.setToolTipText("Export current visualization to PNG image");
+        exportAllButton.setBackground(new Color(230, 255, 230)); // Light green background
+        exportAllButton.setForeground(new Color(0, 100, 0)); // Dark green text
+        exportAllButton.setFont(exportAllButton.getFont().deriveFont(java.awt.Font.BOLD)); // Bold font
+        exportAllButton.addActionListener(e -> {
+            // Determine which panel to export based on current view
+            boolean showSplitView = splitViewCheckbox.isSelected();
+            if (showSplitView) {
+                // Ask user which panel to export
+                String[] options = {"NFA Panel", "DFA Panel", "Cancel"};
+                int choice = JOptionPane.showOptionDialog(frame, 
+                                                         "Which panel would you like to export?", 
+                                                         "Export Panel", 
+                                                         JOptionPane.DEFAULT_OPTION, 
+                                                         JOptionPane.QUESTION_MESSAGE, 
+                                                         null, options, options[0]);
+                if (choice == 0) {
+                    exportToPng(nfaPanel);
+                } else if (choice == 1) {
+                    exportToPng(dfaPanel);
+                }
+            } else {
+                // Only DFA panel is visible
+                exportToPng(dfaPanel);
+            }
+        });
+        buttonPanel.add(exportAllButton);
         
         regexPanel.add(buttonPanel, BorderLayout.EAST);
         
@@ -322,6 +363,9 @@ public class Main {
         JButton exportButton = new JButton("Export");
         exportButton.setToolTipText("Export to PNG image");
         exportButton.addActionListener(e -> exportToPng(panel));
+        exportButton.setBackground(new Color(230, 255, 230)); // Light green background
+        exportButton.setForeground(new Color(0, 100, 0)); // Dark green text
+        exportButton.setFont(exportButton.getFont().deriveFont(java.awt.Font.BOLD)); // Bold font
         toolBar.add(exportButton);
         
         // Add keyboard shortcuts for zooming
@@ -355,6 +399,17 @@ public class Main {
         });
         
         panel.add(toolBar, BorderLayout.NORTH);
+        
+        // Add a separate export button at the bottom of the panel for more visibility
+        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton exportButtonBottom = new JButton("Export to PNG");
+        exportButtonBottom.setToolTipText("Export visualization to PNG image");
+        exportButtonBottom.setBackground(new Color(230, 255, 230)); // Light green background
+        exportButtonBottom.setForeground(new Color(0, 100, 0)); // Dark green text
+        exportButtonBottom.setFont(exportButtonBottom.getFont().deriveFont(java.awt.Font.BOLD)); // Bold font
+        exportButtonBottom.addActionListener(e -> exportToPng(panel));
+        bottomPanel.add(exportButtonBottom);
+        panel.add(bottomPanel, BorderLayout.SOUTH);
     }
     
     /**
@@ -482,7 +537,19 @@ public class Main {
             // First, convert regex to non-minimized DFA
             nonMinimizedDfa = converter.convertRegexToDfaWithoutMinimization(regex);
             
-            // Apply minimization if selected
+            // Get the original NFA from the converter
+            currentNfa = converter.getLastNfa();
+            
+            // Apply NFA minimization if selected
+            if (minimizeNfaCheckbox.isSelected() && currentNfa != null) {
+                minimizedNfa = nfaMinimizer.minimizeNfa(currentNfa);
+                statusArea.setText("NFA minimization successful. Original NFA: " + currentNfa.getStates().size() + 
+                                   " states, Minimized NFA: " + minimizedNfa.getStates().size() + " states.");
+            } else {
+                minimizedNfa = null;
+            }
+            
+            // Apply DFA minimization if selected
             if (minimizeDfaCheckbox.isSelected()) {
                 currentDfa = minimizer.minimize(nonMinimizedDfa);
                 statusArea.setText("Conversion and minimization successful: " + countDfaStats(currentDfa));
@@ -510,18 +577,40 @@ public class Main {
             addVisualizationControls(dfaPanel);
             
             // Visualize NFA if split view is enabled
-            if (showSplitView && converter.getLastNfa() != null) {
-                JComponent nfaVisualization = nfaVisualizer.visualizeNfa(converter.getLastNfa());
-                enablePanAndZoom(nfaVisualization);
-                JScrollPane nfaScroll = new JScrollPane(nfaVisualization);
-                nfaScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-                nfaScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-                nfaScroll.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
-                nfaPanel.add(nfaScroll, BorderLayout.CENTER);
-                nfaPanel.putClientProperty("visualComponent", nfaVisualization);
+            if (showSplitView) {
+                // Determine which NFA to display - minimized or original
+                NFA nfaToDisplay = (minimizeNfaCheckbox.isSelected() && minimizedNfa != null) ? minimizedNfa : currentNfa;
+                
+                if (nfaToDisplay != null) {
+                    // Add a label to indicate if NFA is minimized
+                    JPanel nfaHeaderPanel = new JPanel(new BorderLayout());
+                    JLabel nfaHeaderLabel = new JLabel(minimizeNfaCheckbox.isSelected() && minimizedNfa != null ? 
+                                                     "Minimized NFA (" + nfaToDisplay.getStates().size() + " states)" : 
+                                                     "NFA (" + nfaToDisplay.getStates().size() + " states)");
+                    nfaHeaderPanel.add(nfaHeaderLabel, BorderLayout.CENTER);
+                    nfaPanel.add(nfaHeaderPanel, BorderLayout.NORTH);
+                    
+                    // Add the NFA visualization
+                    JComponent nfaVisualization = nfaVisualizer.visualizeNfa(nfaToDisplay);
+                    enablePanAndZoom(nfaVisualization);
+                    JScrollPane nfaScroll = new JScrollPane(nfaVisualization);
+                    nfaScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+                    nfaScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+                    nfaScroll.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
+                    nfaPanel.add(nfaScroll, BorderLayout.CENTER);
+                    nfaPanel.putClientProperty("visualComponent", nfaVisualization);
+                }
             }
             
             // Visualize DFA
+            // Add a label to indicate if DFA is minimized
+            JPanel dfaHeaderPanel = new JPanel(new BorderLayout());
+            JLabel dfaHeaderLabel = new JLabel(minimizeDfaCheckbox.isSelected() ? 
+                                             "Minimized DFA (" + currentDfa.getStates().size() + " states)" : 
+                                             "Non-minimized DFA (" + currentDfa.getStates().size() + " states)");
+            dfaHeaderPanel.add(dfaHeaderLabel, BorderLayout.CENTER);
+            dfaPanel.add(dfaHeaderPanel, BorderLayout.NORTH);
+            
             JComponent dfaVisualization = dfaVisualizer.visualizeDfa(currentDfa);
             enablePanAndZoom(dfaVisualization);
             JScrollPane dfaScroll = new JScrollPane(dfaVisualization);
@@ -853,13 +942,32 @@ public class Main {
                 }
             }
             
+            // Step 2.5: Minimize NFA
+            statusArea.append("\nStep 2: Minimizing NFA...\n");
+            NfaMinimizer nfaMinimizer = new NfaMinimizer();
+            NFA minimizedNfa = nfaMinimizer.minimizeNfa(nfa);
+            statusArea.append("Minimized NFA: " + minimizedNfa.getStates().size() + " states, " + 
+                             minimizedNfa.getAlphabet().size() + " symbols, " + 
+                             minimizedNfa.getAcceptStates().size() + " accept states\n");
+            
+            statusArea.append("Minimized NFA Transitions:\n");
+            for (Map.Entry<NFA.NFATransition, Set<Integer>> entry : minimizedNfa.getTransitions().entrySet()) {
+                NFA.NFATransition transition = entry.getKey();
+                Set<Integer> targets = entry.getValue();
+                for (int target : targets) {
+                    statusArea.append("  " + transition.getState() + " --[" + 
+                                     (transition.getSymbol() == NFA.EPSILON ? "ε" : transition.getSymbol()) + 
+                                     "]--> " + target + "\n");
+                }
+            }
+            
             // Step 3: Convert NFA to DFA
-            statusArea.append("\nStep 2: Converting NFA to DFA using subset construction...\n");
+            statusArea.append("\nStep 3: Converting NFA to DFA using subset construction...\n");
             SubsetConstruction sc = new SubsetConstruction();
             DFA dfa = sc.convertNfaToDfa(nfa);
             
             // Step 4: Minimize DFA
-            statusArea.append("\nStep 3: Minimizing DFA...\n");
+            statusArea.append("\nStep 4: Minimizing DFA...\n");
             DfaMinimizer minimizer = new DfaMinimizer();
             DFA minimizedDfa = minimizer.minimize(dfa);
             
@@ -1340,6 +1448,9 @@ public class Main {
         addLegendItem(gridPanel, Color.decode("#CCCCFF"), "↻ Self-loop State");
         addLegendItem(gridPanel, new Color(255, 0, 0), "Current Transition");
         
+        // Add epsilon transition legend for NFA
+        addLegendItem(gridPanel, Color.decode("#FF6666"), "ε Epsilon Transition");
+        
         // Add the grid panel to the legend panel
         legendPanel.add(gridPanel);
         
@@ -1348,14 +1459,19 @@ public class Main {
         animationNote.setFont(animationNote.getFont().deriveFont(10.0f));
         legendPanel.add(animationNote);
         
+        // Add info about minimization
+        JLabel minimizationNote = new JLabel("Minimization: DFA and NFA minimization reduces states while preserving behavior");
+        minimizationNote.setFont(minimizationNote.getFont().deriveFont(10.0f));
+        legendPanel.add(minimizationNote);
+        
         // Add a compact note about dragging
         JLabel dragNote = new JLabel("Navigation: Drag states | Ctrl+wheel to zoom | Right-click+drag to pan");
         dragNote.setFont(dragNote.getFont().deriveFont(10.0f));
         legendPanel.add(dragNote);
         
         // Keep legend panel compact
-        legendPanel.setPreferredSize(new Dimension(0, 70));
-        legendPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 70));
+        legendPanel.setPreferredSize(new Dimension(0, 80));
+        legendPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 80));
     }
     
     /**
