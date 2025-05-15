@@ -29,6 +29,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -37,6 +38,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JToolBar;
@@ -80,6 +82,9 @@ public class Main {
     private boolean animationInProgress = false;
     private ScheduledExecutorService animationExecutor;
     private JPanel legendPanel; // Panel to display the legend
+    private JButton stepByStepButton;
+    private JButton algorithmVisualizationButton;
+    private JButton theoryPopupButton;
 
     public Main() {
         converter = new RegexToDfaConverter();
@@ -97,44 +102,50 @@ public class Main {
         frame.setSize(1000, 700); // Larger default size
         frame.setLayout(new BorderLayout());
 
-        // Input panel with regex field and buttons
-        JPanel inputPanel = new JPanel(new BorderLayout());
+        // Main input panel to hold everything
+        JPanel mainInputPanel = new JPanel(new BorderLayout());
         
+        // Top section with regex input
         JPanel regexPanel = new JPanel(new BorderLayout());
-        regexPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        regexPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 5, 10));
         
         JLabel regexLabel = new JLabel("Regular Expression: ");
         regexField = new JTextField();
         regexPanel.add(regexLabel, BorderLayout.WEST);
         regexPanel.add(regexField, BorderLayout.CENTER);
         
-        // Panel for buttons
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        // Add regex panel to the main input panel
+        mainInputPanel.add(regexPanel, BorderLayout.NORTH);
         
-        // Add checkbox for split view
-        splitViewCheckbox = new JCheckBox("Show NFA/DFA Split View");
+        // Create toolbar for our new buttons
+        JToolBar toolBar = new JToolBar();
+        toolBar.setFloatable(false);
+        toolBar.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        
+        // Add checkboxes
+        splitViewCheckbox = new JCheckBox("Split View");
         splitViewCheckbox.setSelected(true);
-        buttonPanel.add(splitViewCheckbox);
+        toolBar.add(splitViewCheckbox);
+        toolBar.addSeparator(new Dimension(10, 10));
         
-        // Add checkbox for DFA minimization
         minimizeDfaCheckbox = new JCheckBox("Minimize DFA");
         minimizeDfaCheckbox.setSelected(true);
         minimizeDfaCheckbox.setToolTipText("Apply Hopcroft's algorithm to minimize the DFA");
-        buttonPanel.add(minimizeDfaCheckbox);
+        toolBar.add(minimizeDfaCheckbox);
+        toolBar.addSeparator(new Dimension(10, 10));
         
-        // Add checkbox for NFA minimization
         minimizeNfaCheckbox = new JCheckBox("Minimize NFA");
         minimizeNfaCheckbox.setSelected(true);
         minimizeNfaCheckbox.setToolTipText("Apply Hopcroft's algorithm to minimize the NFA");
-        buttonPanel.add(minimizeNfaCheckbox);
+        toolBar.add(minimizeNfaCheckbox);
+        toolBar.addSeparator(new Dimension(10, 10));
         
-        // Add checkbox for showing dead states
-        showDeadStatesCheckbox = new JCheckBox("Highlight Dead States");
+        showDeadStatesCheckbox = new JCheckBox("Highlight Dead");
         showDeadStatesCheckbox.setSelected(true);
         showDeadStatesCheckbox.setToolTipText("Highlight states that cannot reach an accept state");
-        buttonPanel.add(showDeadStatesCheckbox);
+        toolBar.add(showDeadStatesCheckbox);
+        toolBar.addSeparator(new Dimension(10, 10));
         
-        // Add checkbox for grid snap
         gridSnapCheckbox = new JCheckBox("Grid Snap");
         gridSnapCheckbox.setSelected(false);
         gridSnapCheckbox.setToolTipText("Snap states to grid when moving them");
@@ -165,51 +176,51 @@ public class Main {
                 }
             }
         });
-        buttonPanel.add(gridSnapCheckbox);
+        toolBar.add(gridSnapCheckbox);
         
+        // Add a larger separator
+        toolBar.addSeparator(new Dimension(30, 10));
+        
+        // Add action buttons
         JButton visualizeButton = new JButton("Visualize DFA");
         visualizeButton.addActionListener(this::visualizeDfa);
-        buttonPanel.add(visualizeButton);
+        toolBar.add(visualizeButton);
+        toolBar.addSeparator(new Dimension(5, 10));
         
         JButton debugButton = new JButton("Debug");
         debugButton.addActionListener(this::debugRegex);
-        buttonPanel.add(debugButton);
+        toolBar.add(debugButton);
+        toolBar.addSeparator(new Dimension(5, 10));
         
-        // Add a global export button as well
-        JButton exportAllButton = new JButton("Export");
-        exportAllButton.setToolTipText("Export current visualization to PNG image");
-        exportAllButton.setBackground(new Color(230, 255, 230)); // Light green background
-        exportAllButton.setForeground(new Color(0, 100, 0)); // Dark green text
-        exportAllButton.setFont(exportAllButton.getFont().deriveFont(java.awt.Font.BOLD)); // Bold font
-        exportAllButton.addActionListener(e -> {
-            // Determine which panel to export based on current view
-            boolean showSplitView = splitViewCheckbox.isSelected();
-            if (showSplitView) {
-                // Ask user which panel to export
-                String[] options = {"NFA Panel", "DFA Panel", "Cancel"};
-                int choice = JOptionPane.showOptionDialog(frame, 
-                                                         "Which panel would you like to export?", 
-                                                         "Export Panel", 
-                                                         JOptionPane.DEFAULT_OPTION, 
-                                                         JOptionPane.QUESTION_MESSAGE, 
-                                                         null, options, options[0]);
-                if (choice == 0) {
-                    exportToPng(nfaPanel);
-                } else if (choice == 1) {
-                    exportToPng(dfaPanel);
-                }
-            } else {
-                // Only DFA panel is visible
-                exportToPng(dfaPanel);
-            }
-        });
-        buttonPanel.add(exportAllButton);
+        // Step-by-step conversion button
+        stepByStepButton = new JButton("Step-by-Step");
+        stepByStepButton.setToolTipText("Show step-by-step conversion from regex to DFA");
+        stepByStepButton.setBackground(new Color(230, 230, 255)); // Light blue background
+        stepByStepButton.addActionListener(e -> showStepByStepConversion());
+        toolBar.add(stepByStepButton);
+        toolBar.addSeparator(new Dimension(5, 10));
         
-        regexPanel.add(buttonPanel, BorderLayout.EAST);
+        // Algorithm visualization button
+        algorithmVisualizationButton = new JButton("Algorithm Viz");
+        algorithmVisualizationButton.setToolTipText("Visualize Thompson's construction and Hopcroft's algorithm");
+        algorithmVisualizationButton.setBackground(new Color(230, 255, 230)); // Light green background
+        algorithmVisualizationButton.addActionListener(e -> showAlgorithmVisualization());
+        toolBar.add(algorithmVisualizationButton);
+        toolBar.addSeparator(new Dimension(5, 10));
         
-        inputPanel.add(regexPanel, BorderLayout.NORTH);
+        // Theory popup button
+        theoryPopupButton = new JButton("Theory");
+        theoryPopupButton.setToolTipText("Show formal definitions and automata theory concepts");
+        theoryPopupButton.setBackground(new Color(255, 230, 230)); // Light red background
+        theoryPopupButton.addActionListener(e -> showTheoryPopup());
+        toolBar.add(theoryPopupButton);
         
-        // Test string panel
+        // Add toolbar to a panel in the center position
+        JPanel toolBarPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        toolBarPanel.add(toolBar);
+        mainInputPanel.add(toolBarPanel, BorderLayout.CENTER);
+        
+        // Test string panel (keep this from the original code)
         JPanel testPanel = new JPanel(new BorderLayout());
         testPanel.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
         
@@ -232,8 +243,12 @@ public class Main {
         testPanel.add(testStringField, BorderLayout.CENTER);
         testPanel.add(testButtonPanel, BorderLayout.EAST);
         
-        inputPanel.add(testPanel, BorderLayout.CENTER);
+        // Add test panel to the main input panel
+        mainInputPanel.add(testPanel, BorderLayout.SOUTH);
         
+        // Add the main input panel to the frame
+        frame.add(mainInputPanel, BorderLayout.NORTH);
+
         // Info panel with supported syntax
         JTextArea syntaxInfo = new JTextArea(
             "Supported Syntax:\n" +
@@ -252,9 +267,7 @@ public class Main {
         
         JScrollPane syntaxScroll = new JScrollPane(syntaxInfo);
         syntaxScroll.setPreferredSize(new Dimension(0, 100));
-        inputPanel.add(syntaxScroll, BorderLayout.SOUTH);
-        
-        frame.add(inputPanel, BorderLayout.NORTH);
+        frame.add(syntaxScroll, BorderLayout.CENTER);
 
         // Create split pane for visualization
         nfaPanel = new JPanel(new BorderLayout());
@@ -1559,6 +1572,428 @@ public class Main {
         itemPanel.add(label);
         
         legendPanel.add(itemPanel);
+    }
+
+    /**
+     * Shows a step-by-step visualization of the conversion process from regex to DFA
+     */
+    private void showStepByStepConversion() {
+        String regex = regexField.getText().trim();
+        if (regex.isEmpty()) {
+            JOptionPane.showMessageDialog(frame, "Please enter a regular expression.", 
+                    "Empty Input", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        try {
+            // Create a dialog to show the step-by-step process
+            JDialog dialog = new JDialog(frame, "Step-by-Step Conversion Process", true);
+            dialog.setSize(900, 650);
+            dialog.setLocationRelativeTo(frame);
+            dialog.setLayout(new BorderLayout());
+            
+            // Create a tabbed pane to show different steps
+            JTabbedPane tabbedPane = new JTabbedPane();
+            
+            // Step 1: Regex parsing and Thompson's construction
+            JPanel step1Panel = createStepPanel("Step 1: Thompson's Construction", 
+                "The regex is parsed and converted to an NFA using Thompson's construction algorithm.",
+                "Each regex operator (concatenation, alternation, Kleene star) is converted to a small NFA fragment, " +
+                "and these fragments are combined according to the structure of the regex.");
+            
+            // Step 2: Epsilon-NFA
+            RegexParser parser = new RegexParser();
+            NFA epsilonNfa = parser.parse(regex);
+            JComponent epsilonNfaViz = nfaVisualizer.visualizeNfa(epsilonNfa);
+            enablePanAndZoom(epsilonNfaViz);
+            
+            JPanel step2Panel = createStepPanel("Step 2: Epsilon-NFA", 
+                "The initial NFA includes epsilon transitions (shown in red).",
+                "This NFA has " + epsilonNfa.getStates().size() + " states and uses epsilon transitions " +
+                "to connect the different parts of the regex.");
+            step2Panel.add(new JScrollPane(epsilonNfaViz), BorderLayout.CENTER);
+            
+            // Step 3: NFA to DFA (Subset Construction)
+            SubsetConstruction sc = new SubsetConstruction();
+            DFA nonMinimizedDfa = sc.convertNfaToDfa(epsilonNfa);
+            JComponent nonMinDfaViz = dfaVisualizer.visualizeDfa(nonMinimizedDfa);
+            enablePanAndZoom(nonMinDfaViz);
+            
+            JPanel step3Panel = createStepPanel("Step 3: Subset Construction (NFA to DFA)", 
+                "The NFA is converted to a DFA using the subset construction algorithm.",
+                "Each state in the DFA corresponds to a set of NFA states. " +
+                "The resulting DFA has " + nonMinimizedDfa.getStates().size() + " states and no epsilon transitions.");
+            step3Panel.add(new JScrollPane(nonMinDfaViz), BorderLayout.CENTER);
+            
+            // Step 4: DFA Minimization (Hopcroft's Algorithm)
+            DfaMinimizer minimizer = new DfaMinimizer();
+            DFA minimizedDfa = minimizer.minimize(nonMinimizedDfa);
+            JComponent minDfaViz = dfaVisualizer.visualizeDfa(minimizedDfa);
+            enablePanAndZoom(minDfaViz);
+            
+            JPanel step4Panel = createStepPanel("Step 4: DFA Minimization (Hopcroft's Algorithm)", 
+                "The DFA is minimized by combining equivalent states.",
+                "The minimized DFA has " + minimizedDfa.getStates().size() + " states, " +
+                "reduced from " + nonMinimizedDfa.getStates().size() + " states in the non-minimized DFA.");
+            step4Panel.add(new JScrollPane(minDfaViz), BorderLayout.CENTER);
+            
+            // Add all steps to the tabbed pane
+            tabbedPane.addTab("Introduction", step1Panel);
+            tabbedPane.addTab("Epsilon-NFA", step2Panel);
+            tabbedPane.addTab("NFA to DFA", step3Panel);
+            tabbedPane.addTab("DFA Minimization", step4Panel);
+            
+            // Add navigation buttons at the bottom
+            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+            
+            JButton prevButton = new JButton("< Previous Step");
+            prevButton.addActionListener(e -> {
+                int currentTab = tabbedPane.getSelectedIndex();
+                if (currentTab > 0) {
+                    tabbedPane.setSelectedIndex(currentTab - 1);
+                }
+            });
+            
+            JButton nextButton = new JButton("Next Step >");
+            nextButton.addActionListener(e -> {
+                int currentTab = tabbedPane.getSelectedIndex();
+                if (currentTab < tabbedPane.getTabCount() - 1) {
+                    tabbedPane.setSelectedIndex(currentTab + 1);
+                }
+            });
+            
+            JButton closeButton = new JButton("Close");
+            closeButton.addActionListener(e -> dialog.dispose());
+            
+            buttonPanel.add(prevButton);
+            buttonPanel.add(nextButton);
+            buttonPanel.add(closeButton);
+            
+            // Add components to dialog
+            dialog.add(tabbedPane, BorderLayout.CENTER);
+            dialog.add(buttonPanel, BorderLayout.SOUTH);
+            
+            // Show the dialog
+            dialog.setVisible(true);
+            
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(frame, "Error creating step-by-step visualization: " + ex.getMessage(), 
+                    "Visualization Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    /**
+     * Shows a visualization of the automata theory algorithms
+     */
+    private void showAlgorithmVisualization() {
+        try {
+            // Create a dialog for algorithm visualization
+            JDialog dialog = new JDialog(frame, "Algorithm Visualization", true);
+            dialog.setSize(900, 650);
+            dialog.setLocationRelativeTo(frame);
+            dialog.setLayout(new BorderLayout());
+            
+            // Create a tabbed pane for different algorithms
+            JTabbedPane tabbedPane = new JTabbedPane();
+            
+            // Thompson's Construction Visualization
+            JPanel thompsonPanel = createAlgorithmPanel("Thompson's Construction", 
+                "Visualizes how regular expressions are converted to NFAs",
+                "Each regex component is converted to an NFA fragment with epsilon transitions.",
+                new String[] {
+                    "1. For a single character 'a', create start and end states connected by 'a'",
+                    "2. For concatenation (ab), connect the accept state of first NFA to start state of second",
+                    "3. For alternation (a|b), create new start/end states with epsilon transitions",
+                    "4. For Kleene star (a*), create a loop with epsilon transitions",
+                    "5. Recursively build the NFA by combining these patterns"
+                });
+            
+            // Subset Construction Visualization
+            JPanel subsetPanel = createAlgorithmPanel("Subset Construction", 
+                "Visualizes how NFAs are converted to DFAs",
+                "Creates DFA states from sets of NFA states, eliminating epsilon transitions.",
+                new String[] {
+                    "1. Start with the epsilon-closure of the NFA's start state",
+                    "2. For each input symbol, compute transitions to new sets of states",
+                    "3. Each set of NFA states becomes one DFA state",
+                    "4. Continue until all reachable state sets are processed",
+                    "5. A state is accepting if it contains any accepting NFA state"
+                });
+            
+            // Hopcroft's Algorithm Visualization
+            JPanel hopcroftPanel = createAlgorithmPanel("Hopcroft's Algorithm", 
+                "Visualizes how DFAs are minimized",
+                "Partitions states into equivalence classes to find minimum state DFA.",
+                new String[] {
+                    "1. Initially partition states into accepting and non-accepting sets",
+                    "2. Refine partitions based on transitions to other partitions",
+                    "3. For each input symbol and partition, check which states lead where",
+                    "4. Split partitions when states have different transition behaviors",
+                    "5. Continue until no more refinements are possible",
+                    "6. Each final partition becomes one state in the minimized DFA"
+                });
+            
+            // Add visualization panels to the tabbed pane
+            tabbedPane.addTab("Thompson's Construction", thompsonPanel);
+            tabbedPane.addTab("Subset Construction", subsetPanel);
+            tabbedPane.addTab("Hopcroft's Algorithm", hopcroftPanel);
+            
+            // Add a close button
+            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+            JButton closeButton = new JButton("Close");
+            closeButton.addActionListener(e -> dialog.dispose());
+            buttonPanel.add(closeButton);
+            
+            // Add components to dialog
+            dialog.add(tabbedPane, BorderLayout.CENTER);
+            dialog.add(buttonPanel, BorderLayout.SOUTH);
+            
+            // Show the dialog
+            dialog.setVisible(true);
+            
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(frame, "Error creating algorithm visualization: " + ex.getMessage(), 
+                    "Visualization Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    /**
+     * Shows a popup with formal definitions and theory concepts
+     */
+    private void showTheoryPopup() {
+        try {
+            // Create a dialog for theory content
+            JDialog dialog = new JDialog(frame, "Automata Theory Concepts", true);
+            dialog.setSize(800, 600);
+            dialog.setLocationRelativeTo(frame);
+            dialog.setLayout(new BorderLayout());
+            
+            // Create a tabbed pane for different theory topics
+            JTabbedPane tabbedPane = new JTabbedPane();
+            
+            // Formal Definition of Regular Expressions
+            JPanel regexPanel = createTheoryPanel("Regular Expressions", 
+                "A formal language for pattern matching in strings",
+                new String[] {
+                    "• ε: The empty string",
+                    "• a: A single character from the alphabet",
+                    "• (r₁r₂): Concatenation of patterns r₁ and r₂",
+                    "• (r₁|r₂): Alternation (matches either r₁ or r₂)",
+                    "• r*: Kleene star (matches zero or more occurrences of r)",
+                    "• r+: Matches one or more occurrences of r (equivalent to rr*)",
+                    "• r?: Matches zero or one occurrence of r (optional)"
+                });
+            
+            // Formal Definition of NFAs
+            JPanel nfaPanel = createTheoryPanel("Nondeterministic Finite Automata (NFA)", 
+                "A state machine that can be in multiple states simultaneously",
+                new String[] {
+                    "• A finite set of states Q",
+                    "• An input alphabet Σ",
+                    "• A transition function δ: Q × (Σ ∪ {ε}) → P(Q)",
+                    "• An initial state q₀ ∈ Q",
+                    "• A set of final states F ⊆ Q",
+                    "",
+                    "An NFA accepts a string if there exists any path from the start state to an accept state.",
+                    "NFAs can have ε-transitions (moves without consuming input) and multiple paths for the same input."
+                });
+            
+            // Formal Definition of DFAs
+            JPanel dfaPanel = createTheoryPanel("Deterministic Finite Automata (DFA)", 
+                "A state machine with exactly one active state and one transition per input",
+                new String[] {
+                    "• A finite set of states Q",
+                    "• An input alphabet Σ",
+                    "• A transition function δ: Q × Σ → Q",
+                    "• An initial state q₀ ∈ Q",
+                    "• A set of final states F ⊆ Q",
+                    "",
+                    "A DFA accepts a string if following the transitions from the start state leads to an accept state.",
+                    "DFAs have exactly one transition for each state and input symbol, with no ε-transitions."
+                });
+            
+            // Equivalence and Closure Properties
+            JPanel propertiesPanel = createTheoryPanel("Equivalence and Properties", 
+                "Relationships between regular expressions, NFAs, and DFAs",
+                new String[] {
+                    "• Regular expressions, NFAs, and DFAs are all equivalent in expressive power",
+                    "• Every NFA can be converted to a DFA (subset construction)",
+                    "• Every DFA can be minimized to a unique minimal form",
+                    "• Regular languages are closed under union, concatenation, and star operations",
+                    "• Regular languages are closed under complement and intersection",
+                    "• The pumping lemma can be used to prove a language is not regular"
+                });
+            
+            // Add theory panels to the tabbed pane
+            tabbedPane.addTab("Regular Expressions", regexPanel);
+            tabbedPane.addTab("NFAs", nfaPanel);
+            tabbedPane.addTab("DFAs", dfaPanel);
+            tabbedPane.addTab("Properties", propertiesPanel);
+            
+            // Add a close button
+            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+            JButton closeButton = new JButton("Close");
+            closeButton.addActionListener(e -> dialog.dispose());
+            buttonPanel.add(closeButton);
+            
+            // Add components to dialog
+            dialog.add(tabbedPane, BorderLayout.CENTER);
+            dialog.add(buttonPanel, BorderLayout.SOUTH);
+            
+            // Show the dialog
+            dialog.setVisible(true);
+            
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(frame, "Error showing theory popup: " + ex.getMessage(), 
+                    "Display Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    /**
+     * Creates a panel for a step in the conversion process
+     */
+    private JPanel createStepPanel(String title, String description, String details) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Create header with title and description
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        JLabel titleLabel = new JLabel("<html><h2>" + title + "</h2></html>");
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+        headerPanel.add(titleLabel, BorderLayout.NORTH);
+        
+        JLabel descLabel = new JLabel("<html><p>" + description + "</p></html>");
+        descLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+        headerPanel.add(descLabel, BorderLayout.CENTER);
+        
+        JLabel detailsLabel = new JLabel("<html><p><i>" + details + "</i></p></html>");
+        headerPanel.add(detailsLabel, BorderLayout.SOUTH);
+        
+        panel.add(headerPanel, BorderLayout.NORTH);
+        
+        return panel;
+    }
+    
+    /**
+     * Creates a panel for algorithm visualization
+     */
+    private JPanel createAlgorithmPanel(String title, String description, String intro, String[] steps) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Create header with title and description
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        JLabel titleLabel = new JLabel("<html><h2>" + title + "</h2></html>");
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+        headerPanel.add(titleLabel, BorderLayout.NORTH);
+        
+        JLabel descLabel = new JLabel("<html><p>" + description + "</p></html>");
+        descLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+        headerPanel.add(descLabel, BorderLayout.CENTER);
+        
+        JLabel introLabel = new JLabel("<html><p><i>" + intro + "</i></p></html>");
+        headerPanel.add(introLabel, BorderLayout.SOUTH);
+        
+        panel.add(headerPanel, BorderLayout.NORTH);
+        
+        // Create steps panel
+        JPanel stepsPanel = new JPanel(new GridLayout(steps.length, 1, 0, 5));
+        stepsPanel.setBorder(BorderFactory.createTitledBorder("Algorithm Steps"));
+        
+        for (String step : steps) {
+            JLabel stepLabel = new JLabel("<html><p>" + step + "</p></html>");
+            stepLabel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+            stepsPanel.add(stepLabel);
+        }
+        
+        // Animation area (would be replaced with actual visualization)
+        JPanel animationPanel = new JPanel(new BorderLayout());
+        animationPanel.setBorder(BorderFactory.createTitledBorder("Algorithm Animation"));
+        JLabel animPlaceholder = new JLabel("<html><div style='text-align:center;'>Animation would be shown here.<br>Click Start to begin.</div></html>", JLabel.CENTER);
+        animationPanel.add(animPlaceholder, BorderLayout.CENTER);
+        
+        JPanel animControlPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        JButton startButton = new JButton("Start Animation");
+        JButton pauseButton = new JButton("Pause");
+        JButton resetButton = new JButton("Reset");
+        
+        // Disable pause button initially
+        pauseButton.setEnabled(false);
+        
+        // Configure animation control buttons
+        startButton.addActionListener(e -> {
+            startButton.setEnabled(false);
+            pauseButton.setEnabled(true);
+            resetButton.setEnabled(true);
+            animPlaceholder.setText("<html><div style='text-align:center;'>Animation in progress...</div></html>");
+        });
+        
+        pauseButton.addActionListener(e -> {
+            startButton.setEnabled(true);
+            pauseButton.setEnabled(false);
+            animPlaceholder.setText("<html><div style='text-align:center;'>Animation paused</div></html>");
+        });
+        
+        resetButton.addActionListener(e -> {
+            startButton.setEnabled(true);
+            pauseButton.setEnabled(false);
+            animPlaceholder.setText("<html><div style='text-align:center;'>Animation reset.<br>Click Start to begin.</div></html>");
+        });
+        
+        animControlPanel.add(startButton);
+        animControlPanel.add(pauseButton);
+        animControlPanel.add(resetButton);
+        
+        animationPanel.add(animControlPanel, BorderLayout.SOUTH);
+        
+        // Create split pane with steps on left and animation on right
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, stepsPanel, animationPanel);
+        splitPane.setResizeWeight(0.4);
+        splitPane.setDividerLocation(300);
+        
+        panel.add(splitPane, BorderLayout.CENTER);
+        
+        return panel;
+    }
+    
+    /**
+     * Creates a panel for theory content
+     */
+    private JPanel createTheoryPanel(String title, String description, String[] points) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Create header with title and description
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        JLabel titleLabel = new JLabel("<html><h2>" + title + "</h2></html>");
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+        headerPanel.add(titleLabel, BorderLayout.NORTH);
+        
+        JLabel descLabel = new JLabel("<html><p>" + description + "</p></html>");
+        headerPanel.add(descLabel, BorderLayout.CENTER);
+        
+        panel.add(headerPanel, BorderLayout.NORTH);
+        
+        // Create content panel with the formal definition points
+        JPanel contentPanel = new JPanel(new BorderLayout());
+        contentPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        StringBuilder htmlContent = new StringBuilder("<html><div style='margin: 10px;'>");
+        for (String point : points) {
+            if (point.isEmpty()) {
+                htmlContent.append("<br>");
+            } else {
+                htmlContent.append("<p>").append(point).append("</p>");
+            }
+        }
+        htmlContent.append("</div></html>");
+        
+        JLabel contentLabel = new JLabel(htmlContent.toString());
+        contentPanel.add(contentLabel, BorderLayout.CENTER);
+        
+        panel.add(contentPanel, BorderLayout.CENTER);
+        
+        return panel;
     }
 
     public void show() {
