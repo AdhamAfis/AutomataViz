@@ -2,7 +2,7 @@
 
 ## Overview
 
-The DFA Visualizer application follows a clean separation of concerns with the following packages:
+The AutomataViz application follows a clean separation of concerns with the following packages:
 
 ### Main Components
 

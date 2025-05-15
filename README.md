@@ -1,4 +1,4 @@
-# Java DFA Visualizer
+# AutomataViz
 
 A comprehensive Java application that converts regular expressions to minimal Deterministic Finite Automata (DFA) and visualizes them as interactive graphs.
 
@@ -80,7 +80,7 @@ This will create a JAR file with dependencies in the `target` directory.
 ### Run
 
 ```
-java -jar target/java-dfa-1.0-SNAPSHOT-jar-with-dependencies.jar
+java -jar target/AutomataViz-1.0-SNAPSHOT-jar-with-dependencies.jar
 ```
 
 Or run directly with Maven:
