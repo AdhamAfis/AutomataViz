@@ -362,38 +362,44 @@ public class DfaVisualizer {
             
             // Check if this is a self-loop
             if (sourceVertex == targetVertex) {
-                // For self-loops, use a custom style for very compact visualization
+                // For self-loops, create a circular loop above the state
                 graphAdapter.setCellStyles(mxConstants.STYLE_LOOP, "1", new Object[] { edge });
-                graphAdapter.setCellStyles(mxConstants.STYLE_EDGE, "loopEdge", new Object[] { edge }); // Custom style name
+                // Use a simpler edge style for better control
+                graphAdapter.setCellStyles(mxConstants.STYLE_EDGE, "orthogonalEdgeStyle", new Object[] { edge });
                 
-                // Use minimal geometry for the loop
+                // Create a circular loop geometry
                 mxGeometry geometry = graphAdapter.getModel().getGeometry(edge);
                 if (geometry != null) {
                     geometry = (mxGeometry) geometry.clone();
                     
-                    // Set a very small offset
-                    geometry.setOffset(new mxPoint(5, -5));
+                    // Position the loop at the top of the state
+                    geometry.setOffset(new mxPoint(0, -20));
                     
-                    // For a very tight loop
+                    // Control points to make a circular loop
                     List<mxPoint> points = new ArrayList<>();
-                    points.add(new mxPoint(8, -8));
-                    points.add(new mxPoint(0, -12));
-                    points.add(new mxPoint(-8, -8));
+                    // Create a wider, more circular arc
+                    points.add(new mxPoint(-25, -25));  // Left point
+                    points.add(new mxPoint(0, -40));    // Top point
+                    points.add(new mxPoint(25, -25));   // Right point
                     
                     geometry.setPoints(points);
                     graphAdapter.getModel().setGeometry(edge, geometry);
                 }
                 
-                // Make loops visually distinct
+                // Styling the loop
                 graphAdapter.setCellStyles(mxConstants.STYLE_STROKECOLOR, LOOP_COLOR, new Object[] { edge });
-                graphAdapter.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "2", new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "2.5", new Object[] { edge });
                 graphAdapter.setCellStyles(mxConstants.STYLE_FONTCOLOR, LOOP_COLOR, new Object[] { edge });
                 graphAdapter.setCellStyles(mxConstants.STYLE_FONTSIZE, "12", new Object[] { edge });
                 
-                // Ensure arrow is visible but small
+                // Arrow styling - make it point downward toward the state
                 graphAdapter.setCellStyles(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC, new Object[] { edge });
-                graphAdapter.setCellStyles(mxConstants.STYLE_ENDSIZE, "5", new Object[] { edge }); // Smaller arrow
+                graphAdapter.setCellStyles(mxConstants.STYLE_ENDSIZE, "7", new Object[] { edge });
                 graphAdapter.setCellStyles(mxConstants.STYLE_ROUNDED, "1", new Object[] { edge });
+                
+                // Position the label at the top of the loop
+                graphAdapter.setCellStyles(mxConstants.STYLE_LABEL_POSITION, "center", new Object[] { edge });
+                graphAdapter.setCellStyles(mxConstants.STYLE_VERTICAL_LABEL_POSITION, "top", new Object[] { edge });
             } else {
                 // For non-loop edges
                 graphAdapter.setCellStyles(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC, new Object[] { edge });
