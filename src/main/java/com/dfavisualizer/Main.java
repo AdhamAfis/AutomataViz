@@ -413,7 +413,48 @@ public class Main {
         }
     }
 
+    /**
+     * Ensures all animation resources are properly cleaned up
+     */
+    private void ensureAnimationCleanup() {
+        // Make sure animation is properly stopped
+        if (animationInProgress || animationExecutor != null) {
+            if (animationExecutor != null) {
+                try {
+                    animationExecutor.shutdownNow();
+                    // Wait briefly for threads to terminate
+                    animationExecutor.awaitTermination(500, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    animationExecutor = null;
+                }
+            }
+            
+            // Reset animation state
+            animationInProgress = false;
+            animateButton.setText("Animate");
+            animateButton.setBackground(null);
+        }
+        
+        // Reset any graph component to a clean state
+        JComponent component = (JComponent) dfaPanel.getClientProperty("visualComponent");
+        if (component instanceof mxGraphComponent) {
+            final mxGraphComponent graphComponent = (mxGraphComponent) component;
+            resetAllCellStyles(graphComponent.getGraph());
+            graphComponent.refresh();
+        }
+    }
+    
     private void visualizeDfa(ActionEvent e) {
+        // If animation is in progress, stop it first
+        if (animationInProgress) {
+            stopAnimation();
+        }
+        
+        // Ensure all animation resources are properly cleaned up
+        ensureAnimationCleanup();
+
         String regex = regexField.getText().trim();
         if (regex.isEmpty()) {
             JOptionPane.showMessageDialog(frame, "Please enter a regular expression.", 
@@ -441,9 +482,17 @@ public class Main {
             
             boolean showSplitView = splitViewCheckbox.isSelected();
             
-            // Clear the visualization panels
+            // Fully clear all panels first to prevent any lingering components
             nfaPanel.removeAll();
             dfaPanel.removeAll();
+            
+            // Recreate the visualization split pane to ensure a clean state
+            if (visualizationSplitPane.getParent() != null) {
+                visualizationSplitPane.getParent().remove(visualizationSplitPane);
+            }
+            visualizationSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, nfaPanel, dfaPanel);
+            visualizationSplitPane.setResizeWeight(0.5);
+            visualizationSplitPane.setOneTouchExpandable(true);
             
             // Re-add the toolbar
             addVisualizationControls(nfaPanel);
@@ -476,8 +525,6 @@ public class Main {
             
             // Show or hide the split view based on checkbox
             if (showSplitView) {
-                visualizationSplitPane.setLeftComponent(nfaPanel);
-                visualizationSplitPane.setRightComponent(dfaPanel);
                 centerPanel.add(visualizationSplitPane, BorderLayout.CENTER);
                 visualizationSplitPane.setDividerLocation(0.5);
             } else {
@@ -876,25 +923,36 @@ public class Main {
         animateButton.setText("Stop Animation");
         animateButton.setBackground(new Color(255, 200, 200));
         
-        // Ensure we're showing only the DFA panel
-        frame.remove(visualizationSplitPane);
-        frame.add(dfaPanel, BorderLayout.CENTER);
+        // Ensure we're showing only the DFA panel during animation to focus on it
+        Component centerComponent = ((BorderLayout)frame.getContentPane().getLayout()).getLayoutComponent(BorderLayout.CENTER);
+        if (centerComponent != null) {
+            frame.remove(centerComponent);
+        }
+        
+        // Create a new panel for the animation
+        JPanel animationPanel = new JPanel(new BorderLayout(0, 5));
+        animationPanel.add(dfaPanel, BorderLayout.CENTER);
+        
+        // Add legend at the bottom with some padding
+        JPanel legendWrapper = new JPanel(new BorderLayout());
+        legendWrapper.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        legendWrapper.add(legendPanel, BorderLayout.CENTER);
+        animationPanel.add(legendWrapper, BorderLayout.SOUTH);
+        
+        // Add the animation panel
+        frame.add(animationPanel, BorderLayout.CENTER);
+        frame.revalidate();
+        frame.repaint();
         
         // Get the graph component
         JComponent component = (JComponent) dfaPanel.getClientProperty("visualComponent");
         if (component instanceof mxGraphComponent) {
             mxGraphComponent graphComponent = (mxGraphComponent) component;
             
-            // Reset all colors to default
-            Object[] cells = graphComponent.getGraph().getChildCells(graphComponent.getGraph().getDefaultParent());
-            for (Object cell : cells) {
-                resetCellStyle(graphComponent.getGraph(), cell);
-            }
+            // Reset all cell styles before animation to ensure clean state
+            resetAllCellStyles(graphComponent.getGraph());
+            graphComponent.refresh();
         }
-        
-        // Update the UI
-        frame.revalidate();
-        frame.repaint();
     }
     
     private void startAnimation(String input) {
