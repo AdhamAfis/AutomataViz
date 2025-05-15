@@ -12,6 +12,9 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
@@ -32,9 +35,12 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
+import com.mxgraph.model.mxGeometry;
 import com.mxgraph.swing.mxGraphComponent;
 import com.mxgraph.util.mxCellRenderer;
+import com.mxgraph.util.mxConstants;
 import com.mxgraph.util.mxPoint;
+import com.mxgraph.view.mxGraph;
 
 public class Main {
     private JFrame frame;
@@ -54,6 +60,9 @@ public class Main {
     private JCheckBox showDeadStatesCheckbox; // New checkbox for showing dead states
     private double zoomFactor = 1.0;
     private DfaMinimizer minimizer; // Direct reference to minimizer
+    private JButton animateButton;
+    private boolean animationInProgress = false;
+    private ScheduledExecutorService animationExecutor;
 
     public Main() {
         converter = new RegexToDfaConverter();
@@ -119,12 +128,22 @@ public class Main {
         
         JLabel testLabel = new JLabel("Test String: ");
         testStringField = new JTextField();
+        
+        JPanel testButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        
         JButton testButton = new JButton("Test");
         testButton.addActionListener(this::testString);
         
+        animateButton = new JButton("Animate");
+        animateButton.addActionListener(this::animateString);
+        animateButton.setToolTipText("Animate string processing through the DFA");
+        
+        testButtonPanel.add(testButton);
+        testButtonPanel.add(animateButton);
+        
         testPanel.add(testLabel, BorderLayout.WEST);
         testPanel.add(testStringField, BorderLayout.CENTER);
-        testPanel.add(testButton, BorderLayout.EAST);
+        testPanel.add(testButtonPanel, BorderLayout.EAST);
         
         inputPanel.add(testPanel, BorderLayout.CENTER);
         
@@ -629,6 +648,321 @@ public class Main {
         return stats;
     }
 
+    private void animateString(ActionEvent e) {
+        if (currentDfa == null) {
+            JOptionPane.showMessageDialog(frame, 
+                    "Please create a DFA first by entering a regex and clicking 'Visualize DFA'.", 
+                    "No DFA Available", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        String testStr = testStringField.getText();
+        if (testStr.isEmpty()) {
+            JOptionPane.showMessageDialog(frame, "Please enter a string to animate.", 
+                    "Empty Test String", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        // If animation is already in progress, stop it
+        if (animationInProgress) {
+            stopAnimation();
+            return;
+        }
+        
+        // Set up animation
+        prepareAnimation();
+        
+        // Start animation
+        startAnimation(testStr);
+    }
+    
+    private void prepareAnimation() {
+        // Set button state to indicate animation is running
+        animationInProgress = true;
+        animateButton.setText("Stop Animation");
+        animateButton.setBackground(new Color(255, 200, 200));
+        
+        // Ensure we're showing only the DFA panel
+        frame.remove(visualizationSplitPane);
+        frame.add(dfaPanel, BorderLayout.CENTER);
+        
+        // Get the graph component
+        JComponent component = (JComponent) dfaPanel.getClientProperty("visualComponent");
+        if (component instanceof mxGraphComponent) {
+            mxGraphComponent graphComponent = (mxGraphComponent) component;
+            
+            // Reset all colors to default
+            Object[] cells = graphComponent.getGraph().getChildCells(graphComponent.getGraph().getDefaultParent());
+            for (Object cell : cells) {
+                resetCellStyle(graphComponent.getGraph(), cell);
+            }
+        }
+        
+        // Update the UI
+        frame.revalidate();
+        frame.repaint();
+    }
+    
+    private void startAnimation(String input) {
+        // Create a scheduled executor for the animation
+        animationExecutor = Executors.newSingleThreadScheduledExecutor();
+        
+        // Set up animation state
+        DFA.State currentState = currentDfa.getStartState();
+        JComponent component = (JComponent) dfaPanel.getClientProperty("visualComponent");
+        
+        if (component instanceof mxGraphComponent) {
+            mxGraphComponent graphComponent = (mxGraphComponent) component;
+            
+            // Highlight start state
+            highlightState(graphComponent.getGraph(), currentState.getName(), new Color(100, 255, 100));
+            
+            // Schedule animation steps for each character in the input
+            for (int i = 0; i < input.length(); i++) {
+                final int step = i;
+                final DFA.State fromState = currentState;
+                final char symbol = input.charAt(i);
+                
+                // Find transition target
+                DFA.State nextState = currentDfa.getTransitionTarget(currentState, symbol);
+                
+                // If no valid transition, stop here
+                if (nextState == null) {
+                    // Schedule the final step that will show the error
+                    animationExecutor.schedule(() -> {
+                        highlightInvalidTransition(graphComponent.getGraph(), fromState.getName(), symbol);
+                        statusArea.setText("Animation complete - String REJECTED at position " + step + 
+                                         ": No transition from state " + fromState.getName() + 
+                                         " on symbol '" + symbol + "'");
+                        animationComplete(false);
+                    }, (step + 1) * 1000, TimeUnit.MILLISECONDS);
+                    return;
+                }
+                
+                // Schedule this step
+                final DFA.State toState = nextState;
+                animationExecutor.schedule(() -> {
+                    // Highlight the transition
+                    highlightTransition(graphComponent.getGraph(), fromState.getName(), toState.getName(), symbol);
+                    // Update status text
+                    statusArea.setText("Step " + (step + 1) + ": " + fromState.getName() + 
+                                     " --[" + symbol + "]--> " + toState.getName());
+                }, (step + 1) * 1000, TimeUnit.MILLISECONDS);
+                
+                currentState = nextState;
+            }
+            
+            // Schedule the final state check
+            final DFA.State finalState = currentState;
+            animationExecutor.schedule(() -> {
+                boolean isAcceptState = currentDfa.getAcceptStates().contains(finalState);
+                
+                if (isAcceptState) {
+                    // Highlight the final state as accept
+                    highlightState(graphComponent.getGraph(), finalState.getName(), new Color(255, 200, 100));
+                    statusArea.setText("Animation complete - String ACCEPTED: Ended in accept state " + 
+                                     finalState.getName());
+                } else {
+                    // Highlight the final state as non-accept
+                    highlightState(graphComponent.getGraph(), finalState.getName(), new Color(255, 150, 150));
+                    statusArea.setText("Animation complete - String REJECTED: Ended in non-accept state " + 
+                                     finalState.getName());
+                }
+                
+                animationComplete(isAcceptState);
+            }, (input.length() + 1) * 1000, TimeUnit.MILLISECONDS);
+        }
+    }
+    
+    private void stopAnimation() {
+        if (animationExecutor != null) {
+            animationExecutor.shutdownNow();
+            animationExecutor = null;
+        }
+        
+        animationInProgress = false;
+        animateButton.setText("Animate");
+        animateButton.setBackground(null);
+        
+        // Reset all cell colors
+        JComponent component = (JComponent) dfaPanel.getClientProperty("visualComponent");
+        if (component instanceof mxGraphComponent) {
+            mxGraphComponent graphComponent = (mxGraphComponent) component;
+            
+            Object[] cells = graphComponent.getGraph().getChildCells(graphComponent.getGraph().getDefaultParent());
+            for (Object cell : cells) {
+                resetCellStyle(graphComponent.getGraph(), cell);
+            }
+        }
+        
+        statusArea.setText("Animation stopped.");
+    }
+    
+    private void animationComplete(boolean accepted) {
+        animationInProgress = false;
+        animateButton.setText("Animate");
+        animateButton.setBackground(null);
+        
+        if (animationExecutor != null) {
+            animationExecutor.shutdown();
+            animationExecutor = null;
+        }
+        
+        // Show dialog when complete
+        SwingUtilities.invokeLater(() -> {
+            String result = "String \"" + testStringField.getText() + "\": " + 
+                          (accepted ? "ACCEPTED" : "REJECTED");
+            
+            if (accepted) {
+                JOptionPane.showMessageDialog(frame, result, "Animation Result", 
+                                            JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(frame, result, "Animation Result", 
+                                            JOptionPane.WARNING_MESSAGE);
+            }
+        });
+    }
+    
+    private void highlightState(mxGraph graph, String stateName, Color color) {
+        Object[] vertices = graph.getChildVertices(graph.getDefaultParent());
+        for (Object vertex : vertices) {
+            if (graph.getLabel(vertex).equals(stateName)) {
+                String hexColor = String.format("#%02x%02x%02x", 
+                                              color.getRed(), color.getGreen(), color.getBlue());
+                graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, hexColor, new Object[] { vertex });
+                graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "3", new Object[] { vertex });
+                break;
+            }
+        }
+    }
+    
+    private void highlightTransition(mxGraph graph, String fromState, String toState, char symbol) {
+        // Reset previous highlighted state
+        resetHighlightedStates(graph);
+        
+        // Highlight the current state
+        highlightState(graph, fromState, new Color(100, 255, 100));
+        
+        // Find and highlight the edge
+        Object[] edges = graph.getChildEdges(graph.getDefaultParent());
+        for (Object edge : edges) {
+            Object source = graph.getModel().getTerminal(edge, true);
+            Object target = graph.getModel().getTerminal(edge, false);
+            
+            if (graph.getLabel(source).equals(fromState) && graph.getLabel(target).equals(toState)) {
+                String edgeLabel = graph.getLabel(edge);
+                
+                // Check if this edge represents the transition we want
+                if (edgeLabel != null && (edgeLabel.indexOf(symbol) >= 0 || edgeLabel.equals(String.valueOf(symbol)))) {
+                    graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#FF0000", new Object[] { edge });
+                    graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "3", new Object[] { edge });
+                    graph.setCellStyles(mxConstants.STYLE_FONTCOLOR, "#FF0000", new Object[] { edge });
+                    graph.setCellStyles(mxConstants.STYLE_FONTSIZE, "14", new Object[] { edge });
+                    
+                    // After a delay, highlight the target state
+                    animationExecutor.schedule(() -> {
+                        // Highlight the target state
+                        highlightState(graph, toState, new Color(100, 100, 255));
+                    }, 500, TimeUnit.MILLISECONDS);
+                    
+                    break;
+                }
+            }
+        }
+    }
+    
+    private void highlightInvalidTransition(mxGraph graph, String stateName, char symbol) {
+        // Reset previous highlighted states
+        resetHighlightedStates(graph);
+        
+        // Highlight the current state in red to indicate error
+        highlightState(graph, stateName, new Color(255, 100, 100));
+        
+        // Display the missing transition symbol nearby
+        Object[] vertices = graph.getChildVertices(graph.getDefaultParent());
+        for (Object vertex : vertices) {
+            if (graph.getLabel(vertex).equals(stateName)) {
+                // Add a temporary label to indicate the missing transition
+                graph.getModel().beginUpdate();
+                try {
+                    mxGeometry geo = graph.getModel().getGeometry(vertex);
+                    Object errorLabel = graph.insertVertex(
+                        graph.getDefaultParent(), null, "No transition for '" + symbol + "'",
+                        geo.getX() + geo.getWidth() + 10, geo.getY(), 120, 30, 
+                        "fontSize=10;fontColor=#FF0000;fillColor=#FFEEEE;strokeColor=#FF0000;rounded=1;");
+                } finally {
+                    graph.getModel().endUpdate();
+                }
+                break;
+            }
+        }
+    }
+    
+    private void resetHighlightedStates(mxGraph graph) {
+        Object[] vertices = graph.getChildVertices(graph.getDefaultParent());
+        for (Object vertex : vertices) {
+            resetCellStyle(graph, vertex);
+        }
+    }
+    
+    private void resetCellStyle(mxGraph graph, Object cell) {
+        // Check if this is a vertex or edge
+        if (graph.getModel().isVertex(cell)) {
+            // For vertices (states), reset to original style based on state type
+            String stateName = graph.getLabel(cell);
+            DFA.State state = findStateByName(currentDfa, stateName);
+            
+            if (state != null) {
+                boolean isStart = (currentDfa.getStartState() == state);
+                boolean isAccept = currentDfa.getAcceptStates().contains(state);
+                
+                if (isStart && isAccept) {
+                    // Start+Accept state
+                    graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, "#FFD6A5", new Object[] { cell });
+                    graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#008800", new Object[] { cell });
+                } else if (isStart) {
+                    // Start state
+                    graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, "#E6FFCC", new Object[] { cell });
+                    graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#008800", new Object[] { cell });
+                } else if (isAccept) {
+                    // Accept state
+                    graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, "#FFEBCC", new Object[] { cell });
+                    graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#444444", new Object[] { cell });
+                } else {
+                    // Regular state
+                    graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, "#E6F2FF", new Object[] { cell });
+                    graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#444444", new Object[] { cell });
+                }
+                
+                graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, isStart || isAccept ? "3" : "1.5", 
+                                   new Object[] { cell });
+            }
+        } else if (graph.getModel().isEdge(cell)) {
+            // For edges (transitions), reset to original style
+            boolean isLoop = graph.getModel().getTerminal(cell, true) == graph.getModel().getTerminal(cell, false);
+            
+            if (isLoop) {
+                graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#6666FF", new Object[] { cell });
+                graph.setCellStyles(mxConstants.STYLE_FONTCOLOR, "#6666FF", new Object[] { cell });
+            } else {
+                graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#666666", new Object[] { cell });
+                graph.setCellStyles(mxConstants.STYLE_FONTCOLOR, "#666666", new Object[] { cell });
+            }
+            
+            graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "1.5", new Object[] { cell });
+            graph.setCellStyles(mxConstants.STYLE_FONTSIZE, "12", new Object[] { cell });
+        }
+    }
+    
+    private DFA.State findStateByName(DFA dfa, String name) {
+        for (DFA.State state : dfa.getStates()) {
+            if (state.getName().equals(name)) {
+                return state;
+            }
+        }
+        return null;
+    }
+
     public void show() {
         SwingUtilities.invokeLater(() -> {
             frame.setLocationRelativeTo(null);
@@ -646,4 +980,6 @@ public class Main {
         
         new Main().show();
     }
+    
+
 } 
