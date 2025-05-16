@@ -327,10 +327,7 @@ public class RegexOptimizer {
             DFA dfa2 = constructLiteralDfa(alt2);
             
             // Merge the two DFAs (simplified for brevity)
-            // In a real implementation, you would need to properly merge the states and transitions
-            
-            // Note: This is just a simplified example; handling arbitrary alternation
-            // properly would require more complex state merging
+            // TODO: Implement proper state merging
             return null;
         }
         

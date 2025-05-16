@@ -134,54 +134,11 @@ public class VisualizationPanel extends JPanel {
             }
         });
         
-        // Add Grid Snap toggle button
-        JButton gridSnapButton = new JButton("⊞ Grid");
-        gridSnapButton.setToolTipText("Enable Grid Snap (snap states to grid when moving)");
-        gridSnapButton.setForeground(new Color(80, 80, 140));
-        
-        // Track grid snap state
-        final boolean[] gridSnapActive = {false};
-        
-        gridSnapButton.addActionListener(e -> {
-            JComponent component = (JComponent) getClientProperty("visualComponent");
-            if (component instanceof mxGraphComponent) {
-                mxGraphComponent graphComponent = (mxGraphComponent) component;
-                
-                // Toggle grid snap
-                gridSnapActive[0] = !gridSnapActive[0];
-                
-                // Update button appearance
-                if (gridSnapActive[0]) {
-                    gridSnapButton.setBackground(new Color(230, 230, 255));
-                    gridSnapButton.setToolTipText("Disable Grid Snap");
-                } else {
-                    gridSnapButton.setBackground(null);
-                    gridSnapButton.setToolTipText("Enable Grid Snap");
-                }
-                
-                // Configure the grid settings
-                graphComponent.setGridVisible(gridSnapActive[0]);
-                graphComponent.getGraph().setGridEnabled(gridSnapActive[0]);
-                
-                // Make grid more visible by setting grid style
-                if (gridSnapActive[0]) {
-                    graphComponent.setGridStyle(mxGraphComponent.GRID_STYLE_LINE);
-                    graphComponent.setGridColor(new Color(220, 220, 220));
-                    // Ensure grid size is appropriate
-                    graphComponent.getGraph().setGridSize(20);
-                }
-                
-                // Store the grid snap setting as a client property for future reference
-                putClientProperty("gridSnapEnabled", gridSnapActive[0]);
-            }
-        });
-        
         // Add buttons to toolbar
         toolBar.add(zoomInButton);
         toolBar.add(zoomOutButton);
         toolBar.add(resetViewButton);
         toolBar.add(panModeButton);
-        toolBar.add(gridSnapButton);
         
         // Add export button
         JButton exportButton = new JButton("Export");
@@ -249,40 +206,32 @@ public class VisualizationPanel extends JPanel {
         // Store the component for later access
         putClientProperty("visualComponent", component);
         
-        // Add pan and zoom capabilities
+        // If this is a graph component, enhance its navigation capabilities
         if (component instanceof mxGraphComponent) {
-            mxGraphComponent graphComponent = (mxGraphComponent) component;
-            enablePanAndZoom(graphComponent);
+            enhanceGraphNavigation((mxGraphComponent) component);
             
-            // Apply current grid snap setting if available
-            Boolean gridSnapEnabled = (Boolean) getClientProperty("gridSnapEnabled");
-            if (gridSnapEnabled != null && gridSnapEnabled) {
-                graphComponent.setGridVisible(true);
-                graphComponent.getGraph().setGridEnabled(true);
-                graphComponent.setGridStyle(mxGraphComponent.GRID_STYLE_LINE);
-                graphComponent.setGridColor(new Color(220, 220, 220));
-                graphComponent.getGraph().setGridSize(20);
-            }
+            // We don't process grid snap settings here anymore - it's handled directly by InputPanel
         }
         
-        // Add the component to a scroll pane
+        // Add the component to a scroll pane and add to the center
         JScrollPane scrollPane = new JScrollPane(component);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         scrollPane.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
-        
-        // Add to the panel
         add(scrollPane, BorderLayout.CENTER);
+        
+        // Refresh UI
         revalidate();
         repaint();
     }
     
     /**
-     * Enable pan and zoom functionality for a graph component
+     * Enhances the navigation capabilities of a graph component with
+     * improved zoom, pan, and keyboard controls
      * 
      * @param graphComponent The graph component to enhance
      */
-    private void enablePanAndZoom(mxGraphComponent graphComponent) {
+    private void enhanceGraphNavigation(mxGraphComponent graphComponent) {
         // Make component properly resize with parent
         graphComponent.setAutoExtend(true);
         graphComponent.setPreferredSize(new Dimension(800, 600));
@@ -310,67 +259,49 @@ public class VisualizationPanel extends JPanel {
             }
         });
         
-        // Enable basic panning with mouse
+        // Enable basic panning with mouse by default (makes navigation more intuitive)
         graphComponent.setPanning(true);
         
-        // Add enhanced pan and zoom controls with mouse
-        graphComponent.getGraphControl().addMouseListener(new MouseAdapter() {
-            private int lastX, lastY;
-            
-            @Override
-            public void mousePressed(MouseEvent e) {
-                // Capture start position for panning
-                lastX = e.getX();
-                lastY = e.getY();
-                
-                // Request focus to enable keyboard shortcuts
-                graphComponent.requestFocusInWindow();
-            }
-        });
-        
-        graphComponent.getGraphControl().addMouseMotionListener(new MouseAdapter() {
-            private int lastX, lastY;
-            
-            @Override
-            public void mouseDragged(MouseEvent e) {
-                // If middle button or right button is pressed, pan the view
-                if (e.isAltDown() || e.getButton() == MouseEvent.BUTTON2 || e.getButton() == MouseEvent.BUTTON3) {
-                    int dx = e.getX() - lastX;
-                    int dy = e.getY() - lastY;
-                    
-                    if (dx != 0 || dy != 0) {
-                        mxPoint translate = graphComponent.getGraph().getView().getTranslate();
-                        graphComponent.getGraph().getView().setTranslate(
-                            new mxPoint(translate.getX() + dx / graphComponent.getZoomFactor(),
-                                       translate.getY() + dy / graphComponent.getZoomFactor()));
-                        
-                        // Update for next drag event
-                        lastX = e.getX();
-                        lastY = e.getY();
-                    }
-                }
-            }
-            
-            @Override
-            public void mousePressed(MouseEvent e) {
-                // Capture start position for panning
-                lastX = e.getX();
-                lastY = e.getY();
-            }
-        });
-        
-        // Add mouse wheel zoom support
+        // Add enhanced pan and zoom controls with mouse wheel, inspired by standard mapping tools
         graphComponent.addMouseWheelListener(e -> {
             if (e.isControlDown()) {
-                if (e.getWheelRotation() < 0) {
-                    // Zoom in
-                    double scale = graphComponent.getGraph().getView().getScale();
-                    graphComponent.zoomTo(scale * 1.1, true);
-                } else {
-                    // Zoom out
-                    double scale = graphComponent.getGraph().getView().getScale();
-                    graphComponent.zoomTo(scale / 1.1, true);
-                }
+                // More precise zoom control
+                int wheelRotation = e.getWheelRotation();
+                double zoomFactor = wheelRotation < 0 ? 1.1 : 0.9;
+                
+                // Get current scale
+                double scale = graphComponent.getGraph().getView().getScale();
+                
+                // Calculate new scale with limits to prevent extreme zooming
+                double newScale = scale * zoomFactor;
+                newScale = Math.max(0.1, Math.min(5.0, newScale)); // Limit scale between 0.1 and 5.0
+                
+                // Get mouse position to zoom toward that point
+                int mouseX = e.getX();
+                int mouseY = e.getY();
+                
+                // Calculate graph position under mouse before zoom
+                mxPoint graphPos = graphComponent.getPointForEvent(e);
+                
+                // Apply zoom
+                graphComponent.getGraph().getView().setScale(newScale);
+                
+                                 // Calculate how much the view needs to be adjusted
+                 // Convert screen coordinates back to graph coordinates after zoom
+                 mxPoint newGraphPos = graphComponent.getPointForEvent(new MouseEvent(
+                     graphComponent, MouseEvent.MOUSE_MOVED, System.currentTimeMillis(),
+                     0, mouseX, mouseY, 0, false));
+                 double dx = (newGraphPos.getX() - graphPos.getX()) * newScale;
+                 double dy = (newGraphPos.getY() - graphPos.getY()) * newScale;
+                
+                // Adjust view translate to keep point under mouse stable
+                mxPoint translate = graphComponent.getGraph().getView().getTranslate();
+                graphComponent.getGraph().getView().setTranslate(
+                    new mxPoint(translate.getX() - dx / newScale, translate.getY() - dy / newScale));
+                
+                // Refresh
+                graphComponent.refresh();
+                
                 e.consume();
             } else {
                 // Allow normal scrolling when not pressing Ctrl
@@ -394,15 +325,87 @@ public class VisualizationPanel extends JPanel {
             }
         });
         
+        // Add improved mouse drag for panning
+        MouseAdapter mouseAdapter = new MouseAdapter() {
+            private int lastX, lastY;
+            private boolean isPanning = false;
+            
+            @Override
+            public void mousePressed(MouseEvent e) {
+                lastX = e.getX();
+                lastY = e.getY();
+                
+                // Middle-click or right-click activates direct panning mode
+                if (e.getButton() == MouseEvent.BUTTON2 || e.getButton() == MouseEvent.BUTTON3) {
+                    isPanning = true;
+                    graphComponent.setCursor(new Cursor(Cursor.MOVE_CURSOR));
+                    e.consume();
+                }
+                
+                // Request focus to enable keyboard shortcuts
+                graphComponent.requestFocusInWindow();
+            }
+            
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                // If middle button, right button, or space key is pressed, pan the view
+                if (isPanning || e.isAltDown()) {
+                    double scale = graphComponent.getGraph().getView().getScale();
+                    int dx = e.getX() - lastX;
+                    int dy = e.getY() - lastY;
+                    
+                    if (dx != 0 || dy != 0) {
+                        mxPoint translate = graphComponent.getGraph().getView().getTranslate();
+                        graphComponent.getGraph().getView().setTranslate(
+                            new mxPoint(translate.getX() + dx / scale, translate.getY() + dy / scale));
+                        graphComponent.refresh();
+                        
+                        // Update for next drag event
+                        lastX = e.getX();
+                        lastY = e.getY();
+                        e.consume();
+                    }
+                }
+            }
+            
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (isPanning) {
+                    isPanning = false;
+                    graphComponent.setCursor(Cursor.getDefaultCursor());
+                    e.consume();
+                }
+            }
+            
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                // Update last positions for potential future dragging
+                lastX = e.getX();
+                lastY = e.getY();
+            }
+        };
+        
+        // Add the mouse listeners to the graph control for better precision
+        graphComponent.getGraphControl().addMouseListener(mouseAdapter);
+        graphComponent.getGraphControl().addMouseMotionListener(mouseAdapter);
+        
         // Add keyboard shortcuts for navigation
         graphComponent.addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
+                int keyCode = e.getKeyCode();
+                
+                // Space key toggles pan mode temporarily
+                if (keyCode == KeyEvent.VK_SPACE) {
+                    graphComponent.setCursor(new Cursor(Cursor.MOVE_CURSOR));
+                }
+                
+                // Keyboard navigation (arrow keys)
                 JScrollPane scrollPane = getParentScrollPane(graphComponent);
                 if (scrollPane != null) {
-                    int scrollAmount = 20;
+                    int scrollAmount = e.isShiftDown() ? 100 : 20; // Larger movements with shift
                     
-                    switch (e.getKeyCode()) {
+                    switch (keyCode) {
                         case KeyEvent.VK_UP:
                             scrollPane.getVerticalScrollBar().setValue(
                                 scrollPane.getVerticalScrollBar().getValue() - scrollAmount);
@@ -426,7 +429,18 @@ public class VisualizationPanel extends JPanel {
                     }
                 }
             }
+            
+            @Override
+            public void keyReleased(KeyEvent e) {
+                // Reset cursor when space is released
+                if (e.getKeyCode() == KeyEvent.VK_SPACE) {
+                    graphComponent.setCursor(Cursor.getDefaultCursor());
+                }
+            }
         });
+        
+        // Enable focus to receive key events
+        graphComponent.setFocusable(true);
     }
     
     /**
@@ -543,7 +557,7 @@ public class VisualizationPanel extends JPanel {
      * 
      * @return The component used for visualization
      */
-    public JComponent getVisualizationComponent() {
+         public JComponent getVisualizationComponent() {
         return (JComponent) getClientProperty("visualComponent");
-    }
+     }
 } 
