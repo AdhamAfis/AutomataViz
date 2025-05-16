@@ -10,6 +10,7 @@ import javax.swing.SwingUtilities;
 import com.dfavisualizer.model.DFA;
 import com.dfavisualizer.ui.MainFrame;
 import com.mxgraph.model.mxCell;
+import com.mxgraph.model.mxGeometry;
 import com.mxgraph.swing.mxGraphComponent;
 import com.mxgraph.util.mxConstants;
 import com.mxgraph.view.mxGraph;
@@ -31,6 +32,10 @@ public class AnimationController {
     private mxGraph graph;
     private mxCell currentStateCell;
     private mxCell currentEdgeCell;
+    
+    // Loop animation
+    private LoopAnimator loopAnimator;
+    private boolean loopAnimationEnabled = true;
     
     /**
      * Constructor - initializes the animation controller
@@ -77,6 +82,11 @@ public class AnimationController {
             
             graphComponent = (mxGraphComponent) component;
             graph = graphComponent.getGraph();
+            
+            // Initialize loop animator if needed
+            if (loopAnimator == null && loopAnimationEnabled) {
+                loopAnimator = new LoopAnimator(graphComponent);
+            }
             
             // Reset any styling from previous animations
             mainFrame.getDfaVisualizer().resetAllStyles();
@@ -144,6 +154,11 @@ public class AnimationController {
         
         animationRunning = false;
         
+        // Stop loop animations if they're active
+        if (loopAnimator != null) {
+            loopAnimator.stopAllAnimations();
+        }
+        
         // Reset styling if a graph is available
         if (graph != null) {
             resetStyles();
@@ -184,6 +199,16 @@ public class AnimationController {
             highlightTransition(currentEdgeCell);
         }
         
+        // Check for self-loop animation
+        boolean isSelfLoop = currentState.equals(nextState);
+        if (isSelfLoop && loopAnimator != null && loopAnimationEnabled) {
+            // Find loop badge (assuming it exists)
+            Object loopBadge = findLoopBadge(currentStateCell);
+            if (loopBadge != null) {
+                loopAnimator.animateLoop(currentStateCell, loopBadge);
+            }
+        }
+        
         // Update status
         mainFrame.getStatusPanel().appendStatus("Step " + (currentPosition + 1) + ": " + 
                 currentState + " --[" + symbol + "]--> " + nextState);
@@ -215,6 +240,11 @@ public class AnimationController {
         }
         
         animationRunning = false;
+        
+        // Stop any active loop animations
+        if (loopAnimator != null) {
+            loopAnimator.stopAllAnimations();
+        }
         
         DFA currentDfa = mainFrame.getCurrentDfa();
         boolean accepted = currentDfa.getAcceptStates().contains(currentState);
@@ -338,6 +368,92 @@ public class AnimationController {
     }
     
     /**
+     * Find a loop badge associated with a state cell
+     * 
+     * @param stateCell The state cell to find a loop badge for
+     * @return The loop badge cell or null if not found
+     */
+    private Object findLoopBadge(mxCell stateCell) {
+        if (stateCell == null || graph == null) {
+            System.out.println("Cannot find loop badge: null state cell or graph");
+            return null;
+        }
+        
+        System.out.println("Finding loop badge for state: " + stateCell.getValue());
+        
+        // First, check direct connections from this state to badges
+        Object[] edges = graph.getEdges(stateCell);
+        if (edges != null) {
+            for (Object edge : edges) {
+                mxCell edgeCell = (mxCell) edge;
+                Object target = edgeCell.getTarget();
+                
+                // Check if this is pointing to a loop badge
+                if (target instanceof mxCell && 
+                    ((mxCell)target).getValue() != null &&
+                    ((mxCell)target).getValue().toString().startsWith("↻")) {
+                    System.out.println("Found loop badge: " + ((mxCell)target).getValue());
+                    return target;
+                }
+            }
+        }
+        
+        // If no direct connection, search all cells
+        Object[] allCells = graph.getChildCells(graph.getDefaultParent(), true, true);
+        for (Object cell : allCells) {
+            if (cell instanceof mxCell) {
+                mxCell mxcell = (mxCell) cell;
+                if (mxcell.getValue() != null && 
+                    mxcell.getValue().toString().startsWith("↻") && 
+                    mxcell.getStyle() != null && 
+                    mxcell.getStyle().contains("LOOP_BADGE")) {
+                    
+                    // For badges without connections, use geometric proximity
+                    mxGeometry stateGeom = graph.getCellGeometry(stateCell);
+                    mxGeometry badgeGeom = graph.getCellGeometry(mxcell);
+                    
+                    if (stateGeom != null && badgeGeom != null) {
+                        // Check if badge is near this state
+                        double distance = Math.sqrt(
+                            Math.pow(stateGeom.getCenterX() - badgeGeom.getCenterX(), 2) +
+                            Math.pow(stateGeom.getCenterY() - badgeGeom.getCenterY(), 2)
+                        );
+                        
+                        if (distance < stateGeom.getWidth() * 1.5) {
+                            System.out.println("Found nearby loop badge: " + mxcell.getValue());
+                            return mxcell;
+                        }
+                    }
+                    
+                    // Also check for connecting edges
+                    Object[] badgeEdges = graph.getEdges(mxcell);
+                    for (Object edge : badgeEdges) {
+                        mxCell edgeCell = (mxCell) edge;
+                        if ((edgeCell.getSource() == stateCell && edgeCell.getTarget() == mxcell) ||
+                            (edgeCell.getSource() == mxcell && edgeCell.getTarget() == stateCell)) {
+                            System.out.println("Found connected loop badge: " + mxcell.getValue());
+                            return mxcell;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // If we still couldn't find a badge, look for self-loops in the graph
+        for (Object edge : graph.getChildEdges(graph.getDefaultParent())) {
+            mxCell edgeCell = (mxCell) edge;
+            if (edgeCell.getSource() == stateCell && edgeCell.getTarget() == stateCell) {
+                // This is a self-loop edge, we can animate directly with the state
+                System.out.println("Found self-loop edge for state: " + stateCell.getValue());
+                return stateCell; // Use the state itself as the badge
+            }
+        }
+        
+        System.out.println("No loop badge found for state: " + stateCell.getValue());
+        return null;
+    }
+    
+    /**
      * Check if an animation is currently running
      * 
      * @return True if an animation is running
@@ -353,6 +469,24 @@ public class AnimationController {
      */
     public mxGraphComponent getGraphComponent() {
         return graphComponent;
+    }
+    
+    /**
+     * Set whether loop animation is enabled
+     * 
+     * @param enabled True to enable loop animation, false to disable
+     */
+    public void setLoopAnimationEnabled(boolean enabled) {
+        this.loopAnimationEnabled = enabled;
+    }
+    
+    /**
+     * Check if loop animation is enabled
+     * 
+     * @return True if loop animation is enabled
+     */
+    public boolean isLoopAnimationEnabled() {
+        return loopAnimationEnabled;
     }
     
     /**

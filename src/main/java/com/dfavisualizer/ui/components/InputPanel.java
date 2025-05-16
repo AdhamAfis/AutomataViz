@@ -9,6 +9,7 @@ import java.awt.event.ActionEvent;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -32,6 +33,7 @@ public class InputPanel extends JPanel {
     private JCheckBox minimizeNfaCheckbox;
     private JCheckBox showDeadStatesCheckbox;
     private JCheckBox gridSnapCheckbox;
+    private JCheckBox animateLoopsCheckbox;
     private JButton visualizeButton;
     private JButton debugButton;
     private JButton stepByStepButton;
@@ -104,6 +106,14 @@ public class InputPanel extends JPanel {
         gridSnapCheckbox.setToolTipText("Snap states to grid when moving them");
         gridSnapCheckbox.addActionListener(this::handleGridSnapToggle);
         toolBar.add(gridSnapCheckbox);
+        toolBar.addSeparator(new Dimension(10, 10));
+        
+        // Add animate loops checkbox
+        animateLoopsCheckbox = new JCheckBox("Animate Loops");
+        animateLoopsCheckbox.setSelected(true);
+        animateLoopsCheckbox.setToolTipText("Animate self-loops during string testing");
+        animateLoopsCheckbox.addActionListener(this::handleAnimateLoopsToggle);
+        toolBar.add(animateLoopsCheckbox);
         
         // Add a larger separator
         toolBar.addSeparator(new Dimension(30, 10));
@@ -204,7 +214,7 @@ public class InputPanel extends JPanel {
     }
     
     /**
-     * Handle the animate button click
+     * Handle the animate string button click
      */
     private void animateString(ActionEvent e) {
         String testString = testStringField.getText().trim();
@@ -215,17 +225,74 @@ public class InputPanel extends JPanel {
     }
     
     /**
-     * Handle grid snap checkbox toggle
+     * Handle toggling grid snap for states
      */
     private void handleGridSnapToggle(ActionEvent e) {
-        boolean enableGridSnap = gridSnapCheckbox.isSelected();
+        boolean gridSnap = gridSnapCheckbox.isSelected();
         
-        // Store grid snap setting for future use
-        // This would typically be used when rendering the visualization
-        mainFrame.getStatusPanel().setStatus("Grid snap " + (enableGridSnap ? "enabled" : "disabled"));
+        // Update grid snap setting in visualizers
+        mainFrame.getDfaVisualizer().setGridSnapEnabled(gridSnap);
         
-        // Note: The actual grid snap implementation would be handled in the visualizers
-        // when they render the graph, but we don't need to implement that in this simplified version
+        // Update any current DFA visualization
+        VisualizationPanel dfaPanel = mainFrame.getDfaPanel();
+        if (dfaPanel != null) {
+            JComponent dfaComponent = (JComponent) dfaPanel.getClientProperty("visualComponent");
+            if (dfaComponent instanceof com.mxgraph.swing.mxGraphComponent) {
+                com.mxgraph.swing.mxGraphComponent graphComponent = (com.mxgraph.swing.mxGraphComponent) dfaComponent;
+                graphComponent.setGridVisible(gridSnap);
+                
+                // Configure grid size and enable snapping
+                if (gridSnap) {
+                    graphComponent.getGraph().setGridSize(20);
+                    graphComponent.getGraph().setGridEnabled(true);
+                } else {
+                    graphComponent.getGraph().setGridEnabled(false);
+                }
+                
+                // Refresh the component to update the grid display
+                graphComponent.refresh();
+            }
+        }
+        
+        // Update NFA visualization if it exists
+        VisualizationPanel nfaPanel = mainFrame.getNfaPanel();
+        if (nfaPanel != null) {
+            JComponent nfaComponent = (JComponent) nfaPanel.getClientProperty("visualComponent");
+            if (nfaComponent instanceof com.mxgraph.swing.mxGraphComponent) {
+                com.mxgraph.swing.mxGraphComponent graphComponent = (com.mxgraph.swing.mxGraphComponent) nfaComponent;
+                graphComponent.setGridVisible(gridSnap);
+                
+                // Configure grid size and enable snapping
+                if (gridSnap) {
+                    graphComponent.getGraph().setGridSize(20);
+                    graphComponent.getGraph().setGridEnabled(true);
+                } else {
+                    graphComponent.getGraph().setGridEnabled(false);
+                }
+                
+                // Refresh the component to update the grid display
+                graphComponent.refresh();
+            }
+        }
+        
+        if (gridSnap) {
+            mainFrame.getStatusPanel().setStatus("Grid snap enabled - Grid size: 20px");
+        } else {
+            mainFrame.getStatusPanel().setStatus("Grid snap disabled");
+        }
+    }
+    
+    /**
+     * Handle toggling animation for self-loops
+     */
+    private void handleAnimateLoopsToggle(ActionEvent e) {
+        boolean animateLoops = animateLoopsCheckbox.isSelected();
+        
+        // Get the controller from MainFrame and set the loop animation state
+        VisualizationController controller = mainFrame.getVisualizationController();
+        if (controller != null) {
+            controller.setLoopAnimationEnabled(animateLoops);
+        }
     }
     
     /**
@@ -234,73 +301,58 @@ public class InputPanel extends JPanel {
     private void showStepByStepConversion() {
         String regex = regexField.getText().trim();
         if (regex.isEmpty()) {
-            JOptionPane.showMessageDialog(mainFrame.getFrame(), "Please enter a regular expression.", 
-                    "Empty Input", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(mainFrame.getFrame(), 
+                "Please enter a regular expression first.", 
+                "Empty Regex", JOptionPane.WARNING_MESSAGE);
             return;
         }
         
+        // Display step-by-step dialog (implementation may vary)
         new StepByStepDialog(mainFrame, regex).display();
     }
     
     /**
-     * Show theory popup dialog
+     * Show theory popup
      */
     private void showTheoryPopup() {
+        // Display theory popup (implementation may vary)
         new TheoryPopupDialog(mainFrame).display();
     }
     
-    /**
-     * Get the regular expression field
-     */
+    // Getters for components
+    
     public JTextField getRegexField() {
         return regexField;
     }
     
-    /**
-     * Get the test string field
-     */
     public JTextField getTestStringField() {
         return testStringField;
     }
     
-    /**
-     * Get the split view checkbox
-     */
     public JCheckBox getSplitViewCheckbox() {
         return splitViewCheckbox;
     }
     
-    /**
-     * Get the minimize DFA checkbox
-     */
     public JCheckBox getMinimizeDfaCheckbox() {
         return minimizeDfaCheckbox;
     }
     
-    /**
-     * Get the minimize NFA checkbox
-     */
     public JCheckBox getMinimizeNfaCheckbox() {
         return minimizeNfaCheckbox;
     }
     
-    /**
-     * Get the show dead states checkbox
-     */
     public JCheckBox getShowDeadStatesCheckbox() {
         return showDeadStatesCheckbox;
     }
     
-    /**
-     * Get the grid snap checkbox
-     */
     public JCheckBox getGridSnapCheckbox() {
         return gridSnapCheckbox;
     }
     
-    /**
-     * Get the animate button
-     */
+    public JCheckBox getAnimateLoopsCheckbox() {
+        return animateLoopsCheckbox;
+    }
+    
     public JButton getAnimateButton() {
         return animateButton;
     }

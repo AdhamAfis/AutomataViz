@@ -360,4 +360,16 @@ public class VisualizationController {
         mainFrame.getNfaPanel().removeAll();
         mainFrame.getDfaPanel().removeAll();
     }
+    
+    /**
+     * Set whether loop animation is enabled for DFA visualization
+     * 
+     * @param enabled True to enable loop animation, false to disable
+     */
+    public void setLoopAnimationEnabled(boolean enabled) {
+        if (animationController != null) {
+            animationController.setLoopAnimationEnabled(enabled);
+            mainFrame.getStatusPanel().setStatus("Loop animation " + (enabled ? "enabled" : "disabled"));
+        }
+    }
 } 
