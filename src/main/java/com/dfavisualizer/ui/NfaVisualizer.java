@@ -255,10 +255,8 @@ public class NfaVisualizer {
         graphComponent.getGraph().setCellsSelectable(true);
         graphComponent.getGraph().setCellsResizable(false);
         
-        // Enable grid functionality but keep it hidden by default
-        graphComponent.setGridVisible(gridSnap);
-        graphComponent.getGraph().setGridSize(GRID_SIZE);
-        graphComponent.getGraph().setGridEnabled(gridSnap);
+        // Grid functionality is controlled by InputPanel's grid snap checkbox
+        // Do not enable grid here - it will be managed by InputPanel
         
         // Improve drag behavior
         graphComponent.setPanning(true);

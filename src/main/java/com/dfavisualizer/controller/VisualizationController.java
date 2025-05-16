@@ -288,6 +288,11 @@ public class VisualizationController {
         for (int i = 0; i < input.length(); i++) {
             char symbol = input.charAt(i);
             
+            // Check if the symbol is in the alphabet
+            if (!dfa.getAlphabet().contains(symbol)) {
+                return false;
+            }
+            
             // Find transition for this symbol
             DFA.State nextState = dfa.getTransitionTarget(currentState, symbol);
             
@@ -318,6 +323,15 @@ public class VisualizationController {
         
         for (int i = 0; i < input.length(); i++) {
             char symbol = input.charAt(i);
+            
+            // Check if the symbol is in the alphabet
+            if (!dfa.getAlphabet().contains(symbol)) {
+                trace.append("Symbol '")
+                     .append(symbol)
+                     .append("' is not in the alphabet of the regular expression.\n");
+                trace.append("String rejected at position ").append(i);
+                return trace.toString();
+            }
             
             // Find transition for this symbol
             DFA.State nextState = dfa.getTransitionTarget(currentState, symbol);

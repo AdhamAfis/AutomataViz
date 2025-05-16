@@ -180,6 +180,15 @@ public class AnimationController {
         
         // Find the next state
         DFA currentDfa = mainFrame.getCurrentDfa();
+        
+        // Check if the symbol is in the DFA's alphabet
+        if (!currentDfa.getAlphabet().contains(symbol)) {
+            // Symbol not in alphabet
+            mainFrame.getStatusPanel().appendStatus("Symbol '" + symbol + "' is not in the alphabet of the regular expression. String rejected.");
+            finishAnimation();
+            return;
+        }
+        
         DFA.State nextState = currentDfa.getTransitionTarget(currentState, symbol);
         
         if (nextState == null) {
@@ -273,9 +282,20 @@ public class AnimationController {
             graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#8B0000", new Object[]{currentStateCell});
             graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "3", new Object[]{currentStateCell});
             
-            // Show completion message
+            // Determine the specific reason for rejection
+            String rejectionReason = "";
+            if (currentPosition < inputString.length()) {
+                char symbol = inputString.charAt(currentPosition);
+                if (!currentDfa.getAlphabet().contains(symbol)) {
+                    rejectionReason = "\nReason: Symbol '" + symbol + "' is not in the alphabet of the regular expression.";
+                } else {
+                    rejectionReason = "\nReason: No valid transition from state " + currentState + " on symbol '" + symbol + "'.";
+                }
+            }
+            
+            // Show completion message with the specific reason
             JOptionPane.showMessageDialog(mainFrame.getFrame(), 
-                    "Animation complete. String \"" + inputString + "\" REJECTED", 
+                    "Animation complete. String \"" + inputString + "\" REJECTED" + rejectionReason, 
                     "Animation Result", JOptionPane.WARNING_MESSAGE);
         }
         
