@@ -226,6 +226,10 @@ public class AnimationController {
             boolean accepted = currentDfa.getAcceptStates().contains(currentState);
             String result = "String \"" + inputString + "\": " + (accepted ? "ACCEPTED" : "REJECTED");
             mainFrame.getStatusPanel().appendStatus(result);
+            
+            // If we've processed the entire string, finish the animation
+            // This ensures animation continues to show each transition first
+            finishAnimation();
         }
     }
     
@@ -247,7 +251,10 @@ public class AnimationController {
         }
         
         DFA currentDfa = mainFrame.getCurrentDfa();
-        boolean accepted = currentDfa.getAcceptStates().contains(currentState);
+        
+        // String is only accepted if we've processed the entire input AND ended in an accept state
+        boolean accepted = currentPosition >= inputString.length() && 
+                          currentDfa.getAcceptStates().contains(currentState);
         
         // Apply special styling to show final result
         if (accepted) {
