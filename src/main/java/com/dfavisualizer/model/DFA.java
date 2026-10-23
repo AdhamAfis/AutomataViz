@@ -6,9 +6,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-/**
- * Represents a Deterministic Finite Automaton (DFA).
- */
 public class DFA {
     private Set<State> states;
     private Set<Character> alphabet;
@@ -79,20 +76,16 @@ public class DFA {
      * @return A set of states that are identified as dead states
      */
     public Set<State> getDeadStates() {
-        // Initially mark all non-accept states as potentially dead
         Set<State> potentialDeadStates = new HashSet<>(states);
         potentialDeadStates.removeAll(acceptStates);
         
-        // If there are no non-accept states, there are no dead states
         if (potentialDeadStates.isEmpty()) {
             return potentialDeadStates; // Empty set
         }
         
-        // States that can reach an accept state
         Set<State> canReachAccept = new HashSet<>(acceptStates);
         boolean changed;
         
-        // Iteratively find all states that can reach an accept state
         do {
             changed = false;
             
@@ -100,8 +93,6 @@ public class DFA {
                 StateTransition transition = entry.getKey();
                 State targetState = entry.getValue();
                 
-                // If the target state can reach an accept state and 
-                // the source state is not yet known to reach an accept state
                 if (canReachAccept.contains(targetState) && 
                     !canReachAccept.contains(transition.getState())) {
                     
@@ -111,7 +102,6 @@ public class DFA {
             }
         } while (changed);
         
-        // Dead states are those that cannot reach any accept state
         potentialDeadStates.removeAll(canReachAccept);
         return potentialDeadStates;
     }
@@ -127,9 +117,6 @@ public class DFA {
         return getDeadStates().contains(state);
     }
 
-    /**
-     * Represents a state in the DFA.
-     */
     public static class State {
         private final String name;
 
@@ -160,9 +147,6 @@ public class DFA {
         }
     }
 
-    /**
-     * Represents a transition in the DFA.
-     */
     public static class StateTransition {
         private final State state;
         private final char symbol;

@@ -1,11 +1,18 @@
 package com.dfavisualizer.ui;
 
 import java.awt.BorderLayout;
-import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
+import javax.swing.BorderFactory;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import com.dfavisualizer.ui.components.ExpressionGuidePanel;
+import com.dfavisualizer.ui.components.GraphControlsPanel;
+import com.dfavisualizer.ui.dialogs.ThemeChooserDialog;
 
 import com.dfavisualizer.algorithm.DfaMinimizer;
 import com.dfavisualizer.algorithm.NfaMinimizer;
@@ -18,9 +25,6 @@ import com.dfavisualizer.ui.components.LegendPanel;
 import com.dfavisualizer.ui.components.StatusPanel;
 import com.dfavisualizer.ui.components.VisualizationPanel;
 
-/**
- * Main application window that contains all UI components and coordinates their interactions.
- */
 public class MainFrame {
     private JFrame frame;
     private InputPanel inputPanel;
@@ -29,8 +33,14 @@ public class MainFrame {
     private StatusPanel statusPanel;
     private LegendPanel legendPanel;
     private JSplitPane visualizationSplitPane;
+    private JSplitPane resultsSplitPane;
+    private JPanel graphWorkspace;
+    private JTabbedPane graphTabs;
+    private ExpressionGuidePanel expressionGuide;
+    private GraphControlsPanel graphControls;
+    private JPanel graphHeader;
+    private ThemeChooserDialog themeChooser;
     
-    // Application state
     private RegexToDfaConverter converter;
     private DfaVisualizer dfaVisualizer;
     private NfaVisualizer nfaVisualizer;
@@ -41,225 +51,324 @@ public class MainFrame {
     private DfaMinimizer dfaMinimizer;
     private NfaMinimizer nfaMinimizer;
     private VisualizationController visualizationController;
+    private javax.swing.SwingWorker<String, Void> expressionWorker;
+    private long expressionRevision;
+    private String graphSourceExpression = "";
     
-    /**
-     * Constructor - initializes the application components
-     */
     public MainFrame() {
-        // Initialize algorithm components
         this.converter = new RegexToDfaConverter();
         this.dfaVisualizer = new DfaVisualizer();
         this.nfaVisualizer = new NfaVisualizer();
         this.dfaMinimizer = new DfaMinimizer();
         this.nfaMinimizer = new NfaMinimizer();
         
-        // Initialize the UI
         initializeUI();
         
-        // Initialize the controller
         this.visualizationController = new VisualizationController(this);
+        for (VisualizationPanel panel : new VisualizationPanel[] {dfaPanel, nfaPanel}) {
+            panel.addPropertyChangeListener("visualComponent", event -> {
+                if (event.getNewValue() instanceof AutomataGraph) {
+                    AutomataGraph graph = (AutomataGraph) event.getNewValue();
+                    graph.addPropertyChangeListener("automaton.edited", edited -> synchronizeEditedGraph(graph));
+                }
+            });
+        }
     }
     
-    /**
-     * Initialize the UI components
-     */
     private void initializeUI() {
-        // Set up the main frame
-        frame = new JFrame("Regex to DFA Visualizer");
+        frame = new JFrame("AutomataViz — Regular Expression Explorer");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(1000, 700);
-        frame.setLayout(new BorderLayout());
+        frame.addWindowListener(new WindowAdapter() {
+            @Override public void windowClosed(WindowEvent e) {
+                if (visualizationController != null) visualizationController.getAnimationController().stopAnimation();
+            }
+        });
+        frame.setSize(1200, 820);
+        frame.setMinimumSize(new Dimension(900, 650));
+        JPanel content = new JPanel(new BorderLayout(0, 0));
+        content.setBackground(UiTheme.BACKGROUND);
+        content.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        frame.setContentPane(content);
         
-        // Create UI components
         inputPanel = new InputPanel(this);
-        nfaPanel = new VisualizationPanel("NFA Visualization");
-        dfaPanel = new VisualizationPanel("DFA Visualization");
+        frame.setJMenuBar(inputPanel.createMenuBar());
+        nfaPanel = new VisualizationPanel("NFA");
+        dfaPanel = new VisualizationPanel("DFA");
         statusPanel = new StatusPanel();
         legendPanel = new LegendPanel();
+        legendPanel.setVisible(false);
         
-        // Create split pane for visualizations
         visualizationSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, nfaPanel, dfaPanel);
         visualizationSplitPane.setResizeWeight(0.5);
         visualizationSplitPane.setOneTouchExpandable(true);
         
-        // Create central panel to hold visualizations and legend
-        JPanel centerPanel = new JPanel(new BorderLayout(0, 5));
-        centerPanel.add(visualizationSplitPane, BorderLayout.CENTER);
-        centerPanel.add(legendPanel, BorderLayout.SOUTH);
-        
-        // Add components to frame
+        visualizationSplitPane.setBorder(BorderFactory.createEmptyBorder());
+        visualizationSplitPane.setDividerSize(6);
+        visualizationSplitPane.setContinuousLayout(true);
+        visualizationSplitPane.setBackground(UiTheme.BACKGROUND);
+
+        graphWorkspace = new JPanel(new BorderLayout(0, 0));
+        graphWorkspace.setBackground(UiTheme.BACKGROUND);
+        graphWorkspace.setMinimumSize(new Dimension(0, 200));
+        graphTabs = new JTabbedPane();
+        graphTabs.putClientProperty("JTabbedPane.showContentSeparator", false);
+        graphTabs.putClientProperty("JTabbedPane.hasFullBorder", false);
+        graphTabs.addTab("DFA", null, dfaPanel, "Deterministic automaton: one active state");
+        graphTabs.addTab("NFA", null, nfaPanel, "Nondeterministic automaton: a set of active states");
+        graphWorkspace.add(graphTabs, BorderLayout.CENTER);
+        expressionGuide = new ExpressionGuidePanel(inputPanel.getRegexField(), message -> {
+            if (visualizationController != null && visualizationController.getAnimationController().isAnimationRunning())
+                visualizationController.getAnimationController().togglePause();
+            statusPanel.setStatus(message);
+        }, visible -> { legendPanel.setVisible(visible); graphWorkspace.revalidate(); });
+        graphControls = new GraphControlsPanel(this);
+        graphHeader = new JPanel(new BorderLayout(0, 0));
+        graphHeader.setOpaque(false);
+        graphHeader.add(expressionGuide, BorderLayout.NORTH);
+        graphTabs.putClientProperty("JTabbedPane.trailingComponent", graphControls);
+        graphWorkspace.add(graphHeader, BorderLayout.NORTH);
+        graphTabs.addChangeListener(e -> updateGraphControls());
+        graphWorkspace.add(legendPanel, BorderLayout.SOUTH);
+
+        resultsSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, graphWorkspace, statusPanel);
+        resultsSplitPane.setResizeWeight(1);
+        resultsSplitPane.setDividerSize(6);
+        resultsSplitPane.setBorder(BorderFactory.createEmptyBorder());
+        resultsSplitPane.setContinuousLayout(true);
+        resultsSplitPane.setBackground(UiTheme.BACKGROUND);
+        resultsSplitPane.getAccessibleContext().setAccessibleName("Resize graph workspace and results");
         frame.add(inputPanel, BorderLayout.NORTH);
-        frame.add(centerPanel, BorderLayout.CENTER);
-        frame.add(statusPanel, BorderLayout.SOUTH);
+        frame.add(resultsSplitPane, BorderLayout.CENTER);
     }
-    
-    /**
-     * Display the main application window
-     */
+
     public void display() {
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
+        resultsSplitPane.setDividerLocation(resultsSplitPane.getHeight()
+                - statusPanel.getPreferredSize().height - resultsSplitPane.getDividerSize());
+        visualizationSplitPane.setDividerLocation(0.5);
+        inputPanel.getRegexField().requestFocusInWindow();
     }
     
-    /**
-     * Get the status panel for displaying messages
-     */
     public StatusPanel getStatusPanel() {
         return statusPanel;
     }
     
-    /**
-     * Get the DFA visualizer
-     */
     public DfaVisualizer getDfaVisualizer() {
         return dfaVisualizer;
     }
     
-    /**
-     * Get the NFA visualizer
-     */
     public NfaVisualizer getNfaVisualizer() {
         return nfaVisualizer;
     }
     
-    /**
-     * Get the RegexToDfaConverter
-     */
     public RegexToDfaConverter getConverter() {
         return converter;
     }
     
-    /**
-     * Get the DfaMinimizer
-     */
     public DfaMinimizer getDfaMinimizer() {
         return dfaMinimizer;
     }
     
-    /**
-     * Get the NfaMinimizer
-     */
     public NfaMinimizer getNfaMinimizer() {
         return nfaMinimizer;
     }
     
-    /**
-     * Get the current DFA
-     */
     public DFA getCurrentDfa() {
         return currentDfa;
     }
     
-    /**
-     * Set the current DFA
-     */
     public void setCurrentDfa(DFA dfa) {
         this.currentDfa = dfa;
     }
     
-    /**
-     * Get the non-minimized DFA
-     */
     public DFA getNonMinimizedDfa() {
         return nonMinimizedDfa;
     }
     
-    /**
-     * Set the non-minimized DFA
-     */
     public void setNonMinimizedDfa(DFA dfa) {
         this.nonMinimizedDfa = dfa;
     }
     
-    /**
-     * Get the current NFA
-     */
     public NFA getCurrentNfa() {
         return currentNfa;
     }
     
-    /**
-     * Set the current NFA
-     */
     public void setCurrentNfa(NFA nfa) {
         this.currentNfa = nfa;
     }
     
-    /**
-     * Get the minimized NFA
-     */
     public NFA getMinimizedNfa() {
         return minimizedNfa;
     }
     
-    /**
-     * Set the minimized NFA
-     */
     public void setMinimizedNfa(NFA nfa) {
         this.minimizedNfa = nfa;
     }
     
-    /**
-     * Get the main JFrame
-     */
     public JFrame getFrame() {
         return frame;
     }
     
-    /**
-     * Get the NFA panel
-     */
     public VisualizationPanel getNfaPanel() {
         return nfaPanel;
     }
     
-    /**
-     * Get the DFA panel
-     */
     public VisualizationPanel getDfaPanel() {
         return dfaPanel;
     }
     
-    /**
-     * Get the visualization split pane
-     */
     public JSplitPane getVisualizationSplitPane() {
         return visualizationSplitPane;
     }
     
-    /**
-     * Update the visualization layout based on split view setting
-     */
     public void updateVisualizationLayout(boolean showSplitView) {
-        // Remove current center panel
-        Component centerComponent = ((BorderLayout)frame.getContentPane().getLayout()).getLayoutComponent(BorderLayout.CENTER);
-        if (centerComponent != null) {
-            frame.remove(centerComponent);
-        }
-        
-        // Create new center panel
-        JPanel centerPanel = new JPanel(new BorderLayout(0, 5));
-        
+        graphControls.getCompareToggle().setSelected(showSplitView);
+        graphWorkspace.remove(visualizationSplitPane);
+        graphWorkspace.remove(graphTabs);
+        graphTabs.putClientProperty("JTabbedPane.trailingComponent", null);
+        graphHeader.remove(graphControls);
+        graphTabs.removeAll();
         if (showSplitView) {
-            centerPanel.add(visualizationSplitPane, BorderLayout.CENTER);
+            graphHeader.add(graphControls, BorderLayout.CENTER);
+            visualizationSplitPane.setLeftComponent(nfaPanel);
+            visualizationSplitPane.setRightComponent(dfaPanel);
+            graphWorkspace.add(visualizationSplitPane, BorderLayout.CENTER);
             visualizationSplitPane.setDividerLocation(0.5);
         } else {
-            centerPanel.add(dfaPanel, BorderLayout.CENTER);
+            graphTabs.putClientProperty("JTabbedPane.trailingComponent", graphControls);
+            graphTabs.addTab("DFA", null, dfaPanel, "Deterministic automaton: one active state");
+            graphTabs.addTab("NFA", null, nfaPanel, "Nondeterministic automaton: a set of active states");
+            graphWorkspace.add(graphTabs, BorderLayout.CENTER);
         }
-        
-        // Add legend
-        centerPanel.add(legendPanel, BorderLayout.SOUTH);
-        
-        // Add the new center panel and refresh
-        frame.add(centerPanel, BorderLayout.CENTER);
-        frame.revalidate();
-        frame.repaint();
+        updateGraphControls();
+        graphWorkspace.revalidate();
+        graphWorkspace.repaint();
     }
-    
-    /**
-     * Get the visualization controller
-     */
+
     public VisualizationController getVisualizationController() {
         return visualizationController;
+    }
+    private void synchronizeEditedGraph(AutomataGraph edited) {
+        synchronizeEditedGraph(edited, expression -> { }, error -> { });
+    }
+
+    public void cancelExpressionUpdate() {
+        expressionRevision++;
+        if (expressionWorker != null) expressionWorker.cancel(true);
+    }
+
+    public void setExpressionSource(String expression) {
+        cancelExpressionUpdate();
+        inputPanel.getRegexField().setText(expression);
+        inputPanel.getRegexField().setCaretPosition(0);
+        showExpression(expression);
+    }
+
+    public void synchronizeEditedGraph(AutomataGraph edited, java.util.function.Consumer<String> updated,
+            java.util.function.Consumer<String> failed) {
+        cancelExpressionUpdate();
+        visualizationController.getAnimationController().stopAnimation();
+        if (edited.getDfaModel() != null) {
+            currentDfa = edited.getDfaModel();
+            nonMinimizedDfa = currentDfa;
+            NFA equivalent = new NFA();
+            java.util.Map<DFA.State, Integer> ids = new java.util.HashMap<>();
+            for (DFA.State state : currentDfa.getStates()) ids.put(state, equivalent.createState());
+            equivalent.setStartState(ids.get(currentDfa.getStartState()));
+            for (DFA.State state : currentDfa.getAcceptStates()) equivalent.addAcceptState(ids.get(state));
+            for (java.util.Map.Entry<DFA.StateTransition, DFA.State> transition : currentDfa.getTransitions().entrySet())
+                equivalent.addTransition(ids.get(transition.getKey().getState()), transition.getKey().getSymbol(), ids.get(transition.getValue()));
+            currentNfa = equivalent;
+            graphControls.showDfaVariant(false, true);
+        } else {
+            currentNfa = edited.getNfaModel();
+            nonMinimizedDfa = new com.dfavisualizer.algorithm.SubsetConstruction().convertNfaToDfa(currentNfa);
+            currentDfa = graphControls.isDfaMinimized() ? dfaMinimizer.minimize(nonMinimizedDfa) : nonMinimizedDfa;
+        }
+        minimizedNfa = null;
+        expressionGuide.setExpression("");
+        com.dfavisualizer.algorithm.AutomatonToRegex conversion = new com.dfavisualizer.algorithm.AutomatonToRegex(currentDfa);
+        String sourceBefore = inputPanel.getRegexField().getText();
+        String originalSource = graphSourceExpression;
+        long revision = expressionRevision;
+        // Rebuild after the drag handler finishes releasing its selected endpoint.
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            if (!frame.isDisplayable() || revision != expressionRevision) return;
+            dfaPanel.setVisualizationComponent(dfaVisualizer.visualizeDfa(currentDfa));
+            nfaPanel.setVisualizationComponent(nfaVisualizer.visualizeNfa(currentNfa));
+            statusPanel.setStatus("Custom automaton: connection changed. Testing and animation use the edited transitions. "
+                    + "Updating expression…");
+            expressionWorker = new javax.swing.SwingWorker<String, Void>() {
+                @Override protected String doInBackground() { return conversion.convert(originalSource, sourceBefore); }
+                @Override protected void done() {
+                    if (isCancelled() || this != expressionWorker || revision != expressionRevision || !frame.isDisplayable()) return;
+                    try {
+                        String expression = get();
+                        if (!inputPanel.getRegexField().getText().equals(sourceBefore)) {
+                            statusPanel.setStatus("Custom automaton: expression was edited manually during conversion; keeping your text.");
+                            failed.accept("Expression changed manually; keeping your text.");
+                            return;
+                        }
+                        inputPanel.getRegexField().setText(expression);
+                        inputPanel.getRegexField().setCaretPosition(0);
+                        expressionGuide.setExpression(expression);
+                        statusPanel.setStatus("Custom automaton: expression updated to match the edited transitions. "
+                                + "Testing and animation use the edited graph.");
+                        updated.accept(expression);
+                    } catch (java.util.concurrent.CancellationException ex) {
+                        return;
+                    } catch (Exception ex) {
+                        Throwable cause = ex.getCause() == null ? ex : ex.getCause();
+                        statusPanel.setStatus("Custom automaton: could not update expression: " + cause.getMessage());
+                        failed.accept(cause.getMessage());
+                    }
+                }
+            };
+            expressionWorker.execute();
+        });
+    }
+
+    public void showRegexAlternatives() {
+        VisualizationPanel selected = graphTabs.getSelectedComponent() == nfaPanel ? nfaPanel : dfaPanel;
+        if (!(selected.getVisualizationComponent() instanceof AutomataGraph)) return;
+        new com.dfavisualizer.ui.dialogs.RegexAlternativesDialog(frame,
+                (AutomataGraph) selected.getVisualizationComponent(),
+                new String[] {graphSourceExpression, inputPanel.getRegexField().getText()}, expression -> {
+                    setExpressionSource(expression);
+                    statusPanel.setStatus("Verified equivalent expression applied. The graph and its layout are preserved.");
+                }).setVisible(true);
+    }
+
+    public void showThemes() {
+        if (themeChooser == null || !themeChooser.isDisplayable()) themeChooser = new ThemeChooserDialog(this);
+        themeChooser.setVisible(true);
+        themeChooser.toFront();
+    }
+
+    public void applyTheme(UiTheme.Theme theme) {
+        if (visualizationController.getAnimationController().isAnimationRunning())
+            visualizationController.getAnimationController().togglePause();
+        UiTheme.apply(theme);
+        visualizationController.getAnimationController().refreshTheme();
+    }
+
+    public GraphControlsPanel getGraphControls() { return graphControls; }
+
+    private void updateGraphControls() {
+        if (graphControls != null) graphControls.getDfaVariant().setEnabled(currentDfa != null
+                && (graphControls.getCompareToggle().isSelected() || graphTabs.getSelectedIndex() == 0));
+    }
+
+    public void showExpression(String regex) { graphSourceExpression = regex; expressionGuide.setExpression(regex); }
+
+    public void showPlayback() {
+        if (graphTabs.getTabCount() > 0) graphTabs.setSelectedIndex(0);
+        int desired = resultsSplitPane.getHeight() - statusPanel.getPreferredSize().height - resultsSplitPane.getDividerSize();
+        if (statusPanel.getHeight() < statusPanel.getPreferredSize().height) {
+            resultsSplitPane.setDividerLocation(Math.max(resultsSplitPane.getMinimumDividerLocation(), desired));
+        }
+        frame.validate();
+        dfaPanel.fitView();
     }
 } 

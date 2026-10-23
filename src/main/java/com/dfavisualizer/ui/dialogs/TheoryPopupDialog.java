@@ -13,38 +13,24 @@ import javax.swing.JTabbedPane;
 
 import com.dfavisualizer.ui.MainFrame;
 
-/**
- * Dialog showing formal definitions and theory concepts for automata theory.
- */
 public class TheoryPopupDialog {
     private JDialog dialog;
     private MainFrame mainFrame;
     
-    /**
-     * Constructor - initializes the dialog
-     * 
-     * @param mainFrame The main application frame
-     */
     public TheoryPopupDialog(MainFrame mainFrame) {
         this.mainFrame = mainFrame;
         setupDialog();
     }
     
-    /**
-     * Set up the dialog content
-     */
     private void setupDialog() {
         try {
-            // Create a dialog for theory content
             dialog = new JDialog(mainFrame.getFrame(), "Automata Theory Concepts", true);
             dialog.setSize(800, 600);
             dialog.setLocationRelativeTo(mainFrame.getFrame());
             dialog.setLayout(new BorderLayout());
             
-            // Create a tabbed pane for different theory topics
             JTabbedPane tabbedPane = new JTabbedPane();
             
-            // Formal Definition of Regular Expressions
             JPanel regexPanel = createTheoryPanel("Regular Expressions", 
                 "A formal language for pattern matching in strings",
                 new String[] {
@@ -57,7 +43,6 @@ public class TheoryPopupDialog {
                     "• r?: Matches zero or one occurrence of r (optional)"
                 });
             
-            // Formal Definition of NFAs
             JPanel nfaPanel = createTheoryPanel("Nondeterministic Finite Automata (NFA)", 
                 "A state machine that can be in multiple states simultaneously",
                 new String[] {
@@ -71,7 +56,6 @@ public class TheoryPopupDialog {
                     "NFAs can have ε-transitions (moves without consuming input) and multiple paths for the same input."
                 });
             
-            // Formal Definition of DFAs
             JPanel dfaPanel = createTheoryPanel("Deterministic Finite Automata (DFA)", 
                 "A state machine with exactly one active state and one transition per input",
                 new String[] {
@@ -85,7 +69,6 @@ public class TheoryPopupDialog {
                     "DFAs have exactly one transition for each state and input symbol, with no ε-transitions."
                 });
             
-            // Equivalence and Closure Properties
             JPanel propertiesPanel = createTheoryPanel("Equivalence and Properties", 
                 "Relationships between regular expressions, NFAs, and DFAs",
                 new String[] {
@@ -97,19 +80,16 @@ public class TheoryPopupDialog {
                     "• The pumping lemma can be used to prove a language is not regular"
                 });
             
-            // Add theory panels to the tabbed pane
             tabbedPane.addTab("Regular Expressions", regexPanel);
             tabbedPane.addTab("NFAs", nfaPanel);
             tabbedPane.addTab("DFAs", dfaPanel);
             tabbedPane.addTab("Properties", propertiesPanel);
             
-            // Add a close button
             JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
             JButton closeButton = new JButton("Close");
             closeButton.addActionListener(e -> dialog.dispose());
             buttonPanel.add(closeButton);
             
-            // Add components to dialog
             dialog.add(tabbedPane, BorderLayout.CENTER);
             dialog.add(buttonPanel, BorderLayout.SOUTH);
         } catch (Exception ex) {
@@ -119,19 +99,10 @@ public class TheoryPopupDialog {
         }
     }
     
-    /**
-     * Create a panel for theory content
-     * 
-     * @param title The theory topic title
-     * @param description A brief description
-     * @param points Array of theory points to display
-     * @return A JPanel configured for the theory content
-     */
     private JPanel createTheoryPanel(String title, String description, String[] points) {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         
-        // Create header with title and description
         JPanel headerPanel = new JPanel(new BorderLayout());
         JLabel titleLabel = new JLabel("<html><h2>" + title + "</h2></html>");
         titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
@@ -142,7 +113,6 @@ public class TheoryPopupDialog {
         
         panel.add(headerPanel, BorderLayout.NORTH);
         
-        // Create content panel with the formal definition points
         JPanel contentPanel = new JPanel(new BorderLayout());
         contentPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         
@@ -164,9 +134,6 @@ public class TheoryPopupDialog {
         return panel;
     }
     
-    /**
-     * Show the dialog
-     */
     public void display() {
         dialog.setVisible(true);
     }

@@ -29,9 +29,6 @@ public class NFA {
         this.nextStateId = 0;
     }
 
-    /**
-     * Creates a basic NFA that accepts a single character.
-     */
     public static NFA forSymbol(char symbol) {
         NFA nfa = new NFA();
         int start = nfa.createState();
@@ -69,14 +66,10 @@ public class NFA {
         
         nfa.setStartState(start);
         nfa.addAcceptState(end);
-        // No transitions added - this NFA accepts nothing
         
         return nfa;
     }
 
-    /**
-     * Creates an NFA that is the concatenation of this NFA and another.
-     */
     public NFA concatenate(NFA other) {
         if (other == null) {
             return this;
@@ -84,21 +77,16 @@ public class NFA {
         
         NFA result = new NFA();
         
-        // Copy states and transitions from this NFA to result
         Map<Integer, Integer> stateMap1 = copyStatesAndTransitions(this, result);
         
-        // Copy states and transitions from other NFA to result
         Map<Integer, Integer> stateMap2 = copyStatesAndTransitions(other, result);
         
-        // Connect accept states of this NFA to start state of other NFA with epsilon transitions
         for (int acceptState : this.acceptStates) {
             result.addTransition(stateMap1.get(acceptState), EPSILON, stateMap2.get(other.startState));
         }
         
-        // Set start and accept states for the result
         result.setStartState(stateMap1.get(this.startState));
         
-        // The accept states are the accept states of the other NFA
         for (int acceptState : other.acceptStates) {
             result.addAcceptState(stateMap2.get(acceptState));
         }
@@ -106,9 +94,6 @@ public class NFA {
         return result;
     }
 
-    /**
-     * Creates an NFA that is the union (alternation) of this NFA and another.
-     */
     public NFA union(NFA other) {
         if (other == null) {
             return this;
@@ -116,25 +101,19 @@ public class NFA {
         
         NFA result = new NFA();
         
-        // Create a new start state
         int newStart = result.createState();
         result.setStartState(newStart);
         
-        // Create a new accept state
         int newAccept = result.createState();
         result.addAcceptState(newAccept);
         
-        // Copy states and transitions from this NFA to result
         Map<Integer, Integer> stateMap1 = copyStatesAndTransitions(this, result);
         
-        // Copy states and transitions from other NFA to result
         Map<Integer, Integer> stateMap2 = copyStatesAndTransitions(other, result);
         
-        // Connect new start state to start states of both NFAs with epsilon transitions
         result.addTransition(newStart, EPSILON, stateMap1.get(this.startState));
         result.addTransition(newStart, EPSILON, stateMap2.get(other.startState));
         
-        // Connect accept states of both NFAs to the new accept state with epsilon transitions
         for (int acceptState : this.acceptStates) {
             result.addTransition(stateMap1.get(acceptState), EPSILON, newAccept);
         }
@@ -151,29 +130,22 @@ public class NFA {
     public NFA kleeneStar() {
         NFA result = new NFA();
         
-        // Create a new start state
         int newStart = result.createState();
         result.setStartState(newStart);
         
-        // Create a new accept state
         int newAccept = result.createState();
         result.addAcceptState(newAccept);
         
-        // Copy states and transitions from this NFA to result
         Map<Integer, Integer> stateMap = copyStatesAndTransitions(this, result);
         
-        // Connect new start state to start state of this NFA with epsilon transitions
         result.addTransition(newStart, EPSILON, stateMap.get(this.startState));
         
-        // Connect new start state to new accept state with epsilon transition (matching empty string)
         result.addTransition(newStart, EPSILON, newAccept);
         
-        // Connect accept states of this NFA to start state of this NFA with epsilon transitions
         for (int acceptState : this.acceptStates) {
             result.addTransition(stateMap.get(acceptState), EPSILON, stateMap.get(this.startState));
         }
         
-        // Connect accept states of this NFA to new accept state with epsilon transitions
         for (int acceptState : this.acceptStates) {
             result.addTransition(stateMap.get(acceptState), EPSILON, newAccept);
         }
@@ -185,7 +157,6 @@ public class NFA {
      * Creates an NFA that accepts one or more repetitions of this NFA.
      */
     public NFA oneOrMore() {
-        // a+ = aa*
         NFA copy = copy();
         return copy.concatenate(this.kleeneStar());
     }
@@ -196,24 +167,18 @@ public class NFA {
     public NFA zeroOrOne() {
         NFA result = new NFA();
         
-        // Create a new start state
         int newStart = result.createState();
         result.setStartState(newStart);
         
-        // Create a new accept state
         int newAccept = result.createState();
         result.addAcceptState(newAccept);
         
-        // Copy states and transitions from this NFA to result
         Map<Integer, Integer> stateMap = copyStatesAndTransitions(this, result);
         
-        // Connect new start state to start state of this NFA with epsilon transitions
         result.addTransition(newStart, EPSILON, stateMap.get(this.startState));
         
-        // Connect new start state to new accept state with epsilon transition (matching empty string)
         result.addTransition(newStart, EPSILON, newAccept);
         
-        // Connect accept states of this NFA to new accept state with epsilon transitions
         for (int acceptState : this.acceptStates) {
             result.addTransition(stateMap.get(acceptState), EPSILON, newAccept);
         }
@@ -221,19 +186,13 @@ public class NFA {
         return result;
     }
 
-    /**
-     * Creates a copy of this NFA.
-     */
     public NFA copy() {
         NFA result = new NFA();
         
-        // Copy states and transitions
         Map<Integer, Integer> stateMap = copyStatesAndTransitions(this, result);
         
-        // Set start state
         result.setStartState(stateMap.get(this.startState));
         
-        // Copy accept states
         for (int acceptState : this.acceptStates) {
             result.addAcceptState(stateMap.get(acceptState));
         }
@@ -248,14 +207,14 @@ public class NFA {
     private Map<Integer, Integer> copyStatesAndTransitions(NFA source, NFA target) {
         Map<Integer, Integer> stateMap = new HashMap<>();
         
-        // Copy states
         for (int state : source.states) {
+            if (Thread.currentThread().isInterrupted()) throw new java.util.concurrent.CancellationException();
             int newState = target.createState();
             stateMap.put(state, newState);
         }
         
-        // Copy transitions
         for (Map.Entry<NFATransition, Set<Integer>> entry : source.transitions.entrySet()) {
+            if (Thread.currentThread().isInterrupted()) throw new java.util.concurrent.CancellationException();
             NFATransition transition = entry.getKey();
             int fromState = stateMap.get(transition.getState());
             char symbol = transition.getSymbol();
@@ -281,13 +240,12 @@ public class NFA {
         Set<Integer> result = new HashSet<>(states);
         Stack<Integer> stack = new Stack<>();
         
-        // Initialize stack with input states
         stack.addAll(states);
         
         while (!stack.isEmpty()) {
+            if (Thread.currentThread().isInterrupted()) throw new java.util.concurrent.CancellationException();
             int state = stack.pop();
             
-            // Find epsilon transitions from this state
             NFATransition transition = new NFATransition(state, EPSILON);
             Set<Integer> targets = transitions.get(transition);
             
@@ -304,9 +262,6 @@ public class NFA {
         return result;
     }
 
-    /**
-     * Computes the states reachable from a set of states by a specific symbol.
-     */
     public Set<Integer> move(Set<Integer> states, char symbol) {
         if (states == null || states.isEmpty()) {
             return new HashSet<>();
@@ -326,18 +281,12 @@ public class NFA {
         return result;
     }
 
-    /**
-     * Creates a new state in the NFA and returns its ID.
-     */
     public int createState() {
         int stateId = nextStateId++;
         states.add(stateId);
         return stateId;
     }
 
-    /**
-     * Adds a transition from one state to another on a given symbol.
-     */
     public void addTransition(int fromState, char symbol, int toState) {
         try {
             if (!states.contains(fromState)) {
@@ -363,9 +312,6 @@ public class NFA {
         }
     }
 
-    /**
-     * Sets the start state of the NFA.
-     */
     public void setStartState(int startState) {
         if (!states.contains(startState)) {
             throw new IllegalArgumentException("State " + startState + " does not exist in the NFA");
@@ -373,9 +319,6 @@ public class NFA {
         this.startState = startState;
     }
 
-    /**
-     * Adds an accept state to the NFA.
-     */
     public void addAcceptState(int acceptState) {
         if (!states.contains(acceptState)) {
             throw new IllegalArgumentException("State " + acceptState + " does not exist in the NFA");
@@ -403,9 +346,6 @@ public class NFA {
         return acceptStates;
     }
 
-    /**
-     * Represents a transition in the NFA.
-     */
     public static class NFATransition {
         private final int state;
         private final char symbol;

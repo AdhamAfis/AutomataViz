@@ -19,9 +19,6 @@ public class OptimizedRegexParser {
     private int position;
     private RegexOptimizer optimizer;
     
-    /**
-     * Creates a new optimized regex parser.
-     */
     public OptimizedRegexParser() {
         this.optimizer = new RegexOptimizer();
     }
@@ -38,7 +35,6 @@ public class OptimizedRegexParser {
      */
     public DFA parseToDfa(String regex) {
         if (regex == null || regex.isEmpty()) {
-            // Create a simple DFA that accepts only the empty string
             DFA dfa = new DFA();
             DFA.State start = new DFA.State("q0");
             dfa.addState(start);
@@ -47,10 +43,8 @@ public class OptimizedRegexParser {
             return dfa;
         }
         
-        // Preprocess the regex
         String processedRegex = preprocessRegex(regex);
         
-        // Try direct DFA construction for recognized patterns
         if (optimizer.canDirectlyConvertToDfa(processedRegex)) {
             try {
                 return optimizer.constructDfaDirectly(processedRegex);
@@ -60,29 +54,20 @@ public class OptimizedRegexParser {
             }
         }
         
-        // Use optimized NFA construction
         try {
             OptimizedNFA optNfa = parseToOptimizedNfa(processedRegex);
             
             // Convert OptimizedNFA to conventional NFA for compatibility with SubsetConstruction
             NFA nfa = optNfa.toConventionalNFA();
             
-            // Convert NFA to DFA using subset construction
             SubsetConstruction subsetConstruction = new SubsetConstruction();
             return subsetConstruction.convertNfaToDfa(nfa);
         } catch (Exception e) {
-            // Print error and rethrow
             System.err.println("Error parsing regex: " + e.getMessage());
             throw e;
         }
     }
     
-    /**
-     * Parses a regular expression and returns the corresponding optimized NFA.
-     * 
-     * @param regex The regular expression to parse
-     * @return An OptimizedNFA that recognizes the language defined by the regex
-     */
     public OptimizedNFA parseToOptimizedNfa(String regex) {
         if (regex == null || regex.isEmpty()) {
             return OptimizedNFA.forEpsilon();
@@ -94,22 +79,17 @@ public class OptimizedRegexParser {
         try {
             return parseExpression();
         } catch (Exception e) {
-            // Print error and rethrow
             System.err.println("Error parsing regex: " + e.getMessage());
             throw e;
         }
     }
 
-    /**
-     * Preprocess the regex to handle escape sequences and other special cases.
-     */
     private String preprocessRegex(String regex) {
         StringBuilder result = new StringBuilder();
         
         for (int i = 0; i < regex.length(); i++) {
             char current = regex.charAt(i);
             
-            // Handle escape sequences
             if (current == '\\' && i + 1 < regex.length()) {
                 result.append(regex.charAt(++i));
                 continue;
@@ -186,7 +166,6 @@ public class OptimizedRegexParser {
                 } else if (operator == '?') {
                     position++;  // Skip '?'
                     
-                    // Create a new NFA for a?
                     OptimizedNFA result = new OptimizedNFA();
                     int newStart = result.createState();
                     int newAccept = result.createState();
@@ -194,13 +173,10 @@ public class OptimizedRegexParser {
                     result.setStartState(newStart);
                     result.addAcceptState(newAccept);
                     
-                    // Connect new start to atom's start
                     result.addEpsilonTransition(newStart, atom.getStartState());
                     
-                    // Connect new start to new accept (empty string case)
                     result.addEpsilonTransition(newStart, newAccept);
                     
-                    // Connect atom's accept states to new accept
                     BitSet atomAccepts = atom.getAcceptStates();
                     for (int state = atomAccepts.nextSetBit(0); state >= 0; state = atomAccepts.nextSetBit(state + 1)) {
                         result.addEpsilonTransition(state, newAccept);
@@ -252,9 +228,6 @@ public class OptimizedRegexParser {
         }
     }
     
-    /**
-     * Parses the dot operator (.) which matches any character.
-     */
     private OptimizedNFA parseDot() {
         OptimizedNFA result = new OptimizedNFA();
         int start = result.createState();
@@ -271,9 +244,6 @@ public class OptimizedRegexParser {
         return result;
     }
     
-    /**
-     * Parses a character class [...] into an NFA.
-     */
     private OptimizedNFA parseCharacterClass() {
         OptimizedNFA result = new OptimizedNFA();
         int start = result.createState();
@@ -290,21 +260,17 @@ public class OptimizedRegexParser {
         
         Set<Character> includedChars = new HashSet<>();
         
-        // Parse the character class content
         while (position < regex.length() && regex.charAt(position) != ']') {
             char current = regex.charAt(position++);
             
-            // Handle character range (e.g., a-z)
             if (position + 1 < regex.length() && regex.charAt(position) == '-' && regex.charAt(position + 1) != ']') {
                 position++; // Skip '-'
                 char end = regex.charAt(position++);
                 
-                // Add all characters in the range
                 for (char c = current; c <= end; c++) {
                     includedChars.add(c);
                 }
             } else {
-                // Add single character
                 includedChars.add(current);
             }
         }
@@ -323,7 +289,6 @@ public class OptimizedRegexParser {
                 }
             }
         } else {
-            // For normal character class, add transitions for all characters in the class
             for (char c : includedChars) {
                 result.addTransition(start, c, accept);
             }
