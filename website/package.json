@@ -1,0 +1,11 @@
+{
+  "name": "automataviz-website",
+  "private": true,
+  "scripts": {
+    "build": "python3 scripts/site.py build",
+    "test": "node --test test/*.test.cjs && python3 -m unittest discover -s test -p '*_test.py'",
+    "verify": "npm run build && npm test && node --check build/site.js && python3 scripts/site.py check",
+    "preview": "python3 -m http.server 4173 --bind 127.0.0.1 --directory build"
+  },
+  "engines": { "node": ">=22" }
+}

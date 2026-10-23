@@ -1,0 +1,6 @@
+.DS_Store
+*.zip
+
+/build/
+/dist/downloads/
+__pycache__/

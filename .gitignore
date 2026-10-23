@@ -55,4 +55,5 @@ Desktop.ini
 /dist/
 /nbdist/
 /.nb-gradle/
-build/ 
+build/
+.playwright-mcp/
