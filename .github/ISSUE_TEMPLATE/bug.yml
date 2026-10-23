@@ -1,0 +1,32 @@
+name: Bug report
+description: Report an app, graph, learning walkthrough, or website problem.
+body:
+  - type: markdown
+    attributes:
+      value: Do not post passwords, tokens, or private data. Report security issues privately through the Security tab.
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the regex and test input as code, preserving every backslash and repetition operator.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: What should happen, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: App build or commit, OS, Java version, and theme; for website issues, browser and screen size.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots or error output
+      description: Attach screenshots and relevant error text if available.

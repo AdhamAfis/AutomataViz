@@ -1,0 +1,17 @@
+name: Improvement suggestion
+description: Suggest a learning, visualization, usability, or website improvement.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is difficult today?
+      description: Describe the task or concept that is hard to complete or understand.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested behavior
+      description: Give a concrete example of how the improvement would help.
+    validations:
+      required: true
