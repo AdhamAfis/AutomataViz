@@ -15,7 +15,7 @@ java -ea -Djava.awt.headless=true -cp 'target/test-classes:target/*' com.dfavisu
 npm --prefix website run verify
 ```
 
-On Windows, use `;` instead of `:` in Java classpaths. These algorithm checks do not replace the desktop interaction harnesses described in the README. Run the relevant Swing checks after UI changes; report what remains unverified. For website presentation changes, inspect desktop and mobile sizes and preserve screenshot transparency.
+On Windows, use `;` instead of `:` in Java classpaths. These algorithm checks do not replace the desktop interaction harnesses described in the [testing guide](docs/TESTING.md). Run the relevant Swing checks after UI changes; report what remains unverified. For website presentation changes, inspect desktop and mobile sizes and preserve screenshot transparency.
 
 The required-check candidate is **Build and verify**. It runs on every pull request, including documentation-only changes. Deployment runs only on the default branch after those checks pass. See [website instructions](website/README.md) for preview and Pages setup.
 
