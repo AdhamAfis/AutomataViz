@@ -14,31 +14,33 @@ import com.dfavisualizer.model.NFA;
  * Implements the subset construction algorithm to convert an NFA to a DFA.
  */
 public class SubsetConstruction {
+    private final Map<DFA.State, Set<Integer>> stateSubsets = new java.util.LinkedHashMap<>();
 
-    /**
-     * Converts an NFA to a DFA using the subset construction algorithm.
-     * 
-     * @param nfa The NFA to convert
-     * @return The resulting DFA
-     */
+    public Map<DFA.State, Set<Integer>> getStateSubsets() {
+        return java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(stateSubsets));
+    }
+
+    private void remember(DFA.State state, Set<Integer> subset) {
+        stateSubsets.put(state, java.util.Collections.unmodifiableSet(new java.util.TreeSet<>(subset)));
+    }
+
     public DFA convertNfaToDfa(NFA nfa) {
         if (nfa == null) {
             throw new IllegalArgumentException("NFA cannot be null");
         }
         
+        stateSubsets.clear();
         DFA dfa = new DFA();
         
-        // Handle empty alphabet case
         if (nfa.getAlphabet().isEmpty()) {
-            // Create a single-state DFA
             DFA.State singleState = new DFA.State("q0");
             dfa.addState(singleState);
             dfa.setStartState(singleState);
             
-            // If NFA's start state is accepting, make DFA's start state accepting
             Set<Integer> startStateSet = new HashSet<>();
             startStateSet.add(nfa.getStartState());
             Set<Integer> eClosureStart = nfa.epsilonClosure(startStateSet);
+            remember(singleState, eClosureStart);
             
             for (int acceptState : nfa.getAcceptStates()) {
                 if (eClosureStart.contains(acceptState)) {
@@ -50,27 +52,22 @@ public class SubsetConstruction {
             return dfa;
         }
         
-        // Track which DFA states correspond to which NFA state subsets
         Map<Set<Integer>, DFA.State> dfaStates = new HashMap<>();
         
-        // Queue of NFA state subsets to process
         Queue<Set<Integer>> queue = new LinkedList<>();
         
-        // Start with the epsilon closure of the NFA start state
         Set<Integer> startStateSet = new HashSet<>();
         startStateSet.add(nfa.getStartState());
         Set<Integer> startStateEClosure = nfa.epsilonClosure(startStateSet);
         
-        // Create start state in DFA
         DFA.State dfaStartState = new DFA.State("q0");
         dfa.setStartState(dfaStartState);
         dfa.addState(dfaStartState);
         
-        // Add start state to queue and mapping
         dfaStates.put(startStateEClosure, dfaStartState);
+        remember(dfaStartState, startStateEClosure);
         queue.add(startStateEClosure);
         
-        // Check if start state is accepting
         boolean isStartAccepting = false;
         for (int acceptState : nfa.getAcceptStates()) {
             if (startStateEClosure.contains(acceptState)) {
@@ -80,26 +77,21 @@ public class SubsetConstruction {
             }
         }
         
-        // Track state ID counter for naming states
         int stateCounter = 1;
         
-        // Process all state subsets
         while (!queue.isEmpty()) {
+            if (Thread.currentThread().isInterrupted()) throw new java.util.concurrent.CancellationException();
             Set<Integer> currentStateSet = queue.poll();
             DFA.State currentDfaState = dfaStates.get(currentStateSet);
             
-            // For each input symbol
-            for (char symbol : nfa.getAlphabet()) {
-                // Compute next state set using e-closure(move(currentStateSet, symbol))
+            for (char symbol : new java.util.TreeSet<>(nfa.getAlphabet())) {
                 Set<Integer> moveResult = nfa.move(currentStateSet, symbol);
                 Set<Integer> nextStateSet = nfa.epsilonClosure(moveResult);
                 
-                // Skip if there are no next states
                 if (nextStateSet.isEmpty()) {
                     continue;
                 }
                 
-                // Get or create DFA state for this set
                 DFA.State nextDfaState;
                 if (dfaStates.containsKey(nextStateSet)) {
                     nextDfaState = dfaStates.get(nextStateSet);
@@ -107,9 +99,9 @@ public class SubsetConstruction {
                     nextDfaState = new DFA.State("q" + stateCounter++);
                     dfa.addState(nextDfaState);
                     dfaStates.put(nextStateSet, nextDfaState);
+                    remember(nextDfaState, nextStateSet);
                     queue.add(nextStateSet);
                     
-                    // Check if this new state is accepting
                     for (int acceptState : nfa.getAcceptStates()) {
                         if (nextStateSet.contains(acceptState)) {
                             dfa.addAcceptState(nextDfaState);
@@ -118,12 +110,10 @@ public class SubsetConstruction {
                     }
                 }
                 
-                // Add transition to DFA
                 dfa.addTransition(currentDfaState, symbol, nextDfaState);
             }
         }
         
-        // Ensure complete transition function by adding a "dead state" for missing transitions
         ensureCompleteTransitionFunction(dfa);
         
         return dfa;
@@ -134,7 +124,6 @@ public class SubsetConstruction {
      * and transitions to it for any missing transitions.
      */
     private void ensureCompleteTransitionFunction(DFA dfa) {
-        // Skip if alphabet is empty
         Set<Character> alphabet = dfa.getAlphabet();
         if (alphabet == null || alphabet.isEmpty()) {
             return;
@@ -145,11 +134,9 @@ public class SubsetConstruction {
             return;
         }
         
-        // Create a "dead state" if needed
         DFA.State deadState = null;
         boolean needDeadState = false;
         
-        // Check if we need a dead state
         for (DFA.State state : states) {
             if (state == null) continue;
             
@@ -163,26 +150,22 @@ public class SubsetConstruction {
             if (needDeadState) break;
         }
         
-        // Create dead state if needed
         if (needDeadState) {
             deadState = new DFA.State("qDead");
             dfa.addState(deadState);
+            remember(deadState, java.util.Collections.emptySet());
             
-            // Make sure the dead state loops back to itself for all symbols
             for (char deadSymbol : alphabet) {
                 dfa.addTransition(deadState, deadSymbol, deadState);
             }
             
-            // Add missing transitions to the dead state
             for (DFA.State state : states) {
                 if (state == null || state == deadState) continue; // Skip null or the dead state itself
                 
                 for (char symbol : alphabet) {
                     DFA.StateTransition transition = new DFA.StateTransition(state, symbol);
                     
-                    // If no transition exists for this state and symbol
                     if (!dfa.getTransitions().containsKey(transition)) {
-                        // Add transition to the dead state
                         dfa.addTransition(state, symbol, deadState);
                     }
                 }

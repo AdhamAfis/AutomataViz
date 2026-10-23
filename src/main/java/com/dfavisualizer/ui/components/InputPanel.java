@@ -1,303 +1,150 @@
 package com.dfavisualizer.ui.components;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
+import java.awt.GridLayout;
+import java.awt.Font;
 import java.awt.event.ActionEvent;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
-import javax.swing.JCheckBox;
-import javax.swing.JComponent;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
-import javax.swing.JToolBar;
 
 import com.dfavisualizer.controller.VisualizationController;
 import com.dfavisualizer.ui.MainFrame;
+import com.dfavisualizer.ui.UiTheme;
 import com.dfavisualizer.ui.dialogs.StepByStepDialog;
 import com.dfavisualizer.ui.dialogs.TheoryPopupDialog;
 
 /**
- * Panel containing input controls for the regex input, test string, and various options.
+ * Expression and test inputs, with learning actions exposed through the application menu.
  */
 public class InputPanel extends JPanel {
     private MainFrame mainFrame;
     private JTextField regexField;
     private JTextField testStringField;
-    private JCheckBox splitViewCheckbox;
-    private JCheckBox minimizeDfaCheckbox;
-    private JCheckBox minimizeNfaCheckbox;
-    private JCheckBox showDeadStatesCheckbox;
-    private JCheckBox gridSnapCheckbox;
-    private JCheckBox animateLoopsCheckbox;
     private JButton visualizeButton;
-    private JButton debugButton;
-    private JButton stepByStepButton;
-    private JButton theoryPopupButton;
     private JButton testButton;
     private JButton animateButton;
     
-    /**
-     * Constructor - initializes the input panel
-     * 
-     * @param mainFrame The main application frame
-     */
     public InputPanel(MainFrame mainFrame) {
         this.mainFrame = mainFrame;
         setLayout(new BorderLayout());
         initializeComponents();
     }
     
-    /**
-     * Initialize panel components
-     */
     private void initializeComponents() {
-        // Since the VisualizationController is created after this panel in MainFrame,
-        // we need to get the reference later when we actually need it
-        
-        // Regex input section
-        JPanel regexPanel = new JPanel(new BorderLayout());
-        regexPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 5, 10));
-        
-        JLabel regexLabel = new JLabel("Regular Expression: ");
+        setLayout(new BorderLayout(0, 6));
+        setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, UiTheme.BORDER),
+                BorderFactory.createEmptyBorder(8, 10, 8, 10)));
+
+        JPanel inputs = new JPanel(new BorderLayout(0, 4));
+        JPanel regexPanel = new JPanel(new BorderLayout(10, 0));
+        JLabel regexLabel = new JLabel("Expression");
+        regexLabel.setForeground(UiTheme.MUTED);
+        regexLabel.setPreferredSize(new Dimension(86, 30));
         regexField = new JTextField();
+        regexField.putClientProperty("JTextField.placeholderText", "Try (a|b)*abb");
+        regexField.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 15));
+        regexField.setToolTipText("For example: a(b|c)* or (a|b)*abb. Press Enter to visualize.");
+        regexField.addActionListener(this::visualizeDfa);
+        regexLabel.setLabelFor(regexField);
+        visualizeButton = new JButton("Visualize DFA");
+        visualizeButton.setFont(visualizeButton.getFont().deriveFont(Font.PLAIN));
+        visualizeButton.addActionListener(this::visualizeDfa);
         regexPanel.add(regexLabel, BorderLayout.WEST);
         regexPanel.add(regexField, BorderLayout.CENTER);
-        
-        // Add regex panel to the main input panel
-        add(regexPanel, BorderLayout.NORTH);
-        
-        // Create toolbar for buttons and checkboxes
-        JToolBar toolBar = new JToolBar();
-        toolBar.setFloatable(false);
-        toolBar.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-        
-        // Add checkboxes
-        splitViewCheckbox = new JCheckBox("Split View");
-        splitViewCheckbox.setSelected(true);
-        splitViewCheckbox.addActionListener(e -> mainFrame.updateVisualizationLayout(splitViewCheckbox.isSelected()));
-        toolBar.add(splitViewCheckbox);
-        toolBar.addSeparator(new Dimension(10, 10));
-        
-        minimizeDfaCheckbox = new JCheckBox("Minimize DFA");
-        minimizeDfaCheckbox.setSelected(true);
-        minimizeDfaCheckbox.setToolTipText("Apply Hopcroft's algorithm to minimize the DFA");
-        toolBar.add(minimizeDfaCheckbox);
-        toolBar.addSeparator(new Dimension(10, 10));
-        
-        minimizeNfaCheckbox = new JCheckBox("Minimize NFA");
-        minimizeNfaCheckbox.setSelected(true);
-        minimizeNfaCheckbox.setToolTipText("Apply Hopcroft's algorithm to minimize the NFA");
-        toolBar.add(minimizeNfaCheckbox);
-        toolBar.addSeparator(new Dimension(10, 10));
-        
-        showDeadStatesCheckbox = new JCheckBox("Highlight Dead");
-        showDeadStatesCheckbox.setSelected(true);
-        showDeadStatesCheckbox.setToolTipText("Highlight states that cannot reach an accept state");
-        toolBar.add(showDeadStatesCheckbox);
-        toolBar.addSeparator(new Dimension(10, 10));
-        
-        gridSnapCheckbox = new JCheckBox("Grid Snap");
-        gridSnapCheckbox.setSelected(false);
-        gridSnapCheckbox.setToolTipText("Snap states to grid when moving them");
-        gridSnapCheckbox.addActionListener(this::handleGridSnapToggle);
-        toolBar.add(gridSnapCheckbox);
-        toolBar.addSeparator(new Dimension(10, 10));
-        
-        // Add animate loops checkbox
-        animateLoopsCheckbox = new JCheckBox("Animate Loops");
-        animateLoopsCheckbox.setSelected(true);
-        animateLoopsCheckbox.setToolTipText("Animate self-loops during string testing");
-        animateLoopsCheckbox.addActionListener(this::handleAnimateLoopsToggle);
-        toolBar.add(animateLoopsCheckbox);
-        
-        // Add a larger separator
-        toolBar.addSeparator(new Dimension(30, 10));
-        
-        // Add action buttons
-        visualizeButton = new JButton("Visualize DFA");
-        visualizeButton.addActionListener(this::visualizeDfa);
-        toolBar.add(visualizeButton);
-        toolBar.addSeparator(new Dimension(5, 10));
-        
-        debugButton = new JButton("Debug");
-        debugButton.addActionListener(this::debugRegex);
-        toolBar.add(debugButton);
-        toolBar.addSeparator(new Dimension(5, 10));
-        
-        // Step-by-step conversion button
-        stepByStepButton = new JButton("Step-by-Step");
-        stepByStepButton.setToolTipText("Show step-by-step conversion from regex to DFA");
-        stepByStepButton.setBackground(new Color(230, 230, 255)); // Light blue background
-        stepByStepButton.addActionListener(e -> showStepByStepConversion());
-        toolBar.add(stepByStepButton);
-        toolBar.addSeparator(new Dimension(5, 10));
-        
-        // Theory popup button
-        theoryPopupButton = new JButton("Theory");
-        theoryPopupButton.setToolTipText("Show formal definitions and automata theory concepts");
-        theoryPopupButton.setBackground(new Color(255, 230, 230)); // Light red background
-        theoryPopupButton.addActionListener(e -> showTheoryPopup());
-        toolBar.add(theoryPopupButton);
-        
-        // Add toolbar to a panel in the center position
-        JPanel toolBarPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        toolBarPanel.add(toolBar);
-        add(toolBarPanel, BorderLayout.CENTER);
-        
-        // Test string panel
-        JPanel testPanel = new JPanel(new BorderLayout());
-        testPanel.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
-        
-        JLabel testLabel = new JLabel("Test String: ");
+        regexPanel.add(visualizeButton, BorderLayout.EAST);
+        inputs.add(regexPanel, BorderLayout.NORTH);
+
+        add(inputs, BorderLayout.CENTER);
+
+        JPanel testPanel = new JPanel(new BorderLayout(10, 0));
+        JLabel testLabel = new JLabel("Test string");
+        testLabel.setForeground(UiTheme.MUTED);
+        testLabel.setPreferredSize(new Dimension(86, 30));
         testStringField = new JTextField();
-        
-        JPanel testButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        
+        testStringField.putClientProperty("JTextField.placeholderText", "Enter a string to follow through the graph");
+        testStringField.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 14));
+        testStringField.addActionListener(this::testString);
+        testLabel.setLabelFor(testStringField);
+        JPanel testButtons = new JPanel(new GridLayout(1, 2, 6, 0));
         testButton = new JButton("Test");
         testButton.addActionListener(this::testString);
-        
         animateButton = new JButton("Animate");
+        animateButton.setFont(animateButton.getFont().deriveFont(Font.PLAIN));
         animateButton.addActionListener(this::animateString);
-        animateButton.setToolTipText("Animate string processing through the DFA");
-        
-        testButtonPanel.add(testButton);
-        testButtonPanel.add(animateButton);
-        
+        animateButton.setToolTipText("Follow the test string through the DFA, one symbol at a time");
+        testButtons.add(testButton);
+        testButtons.add(animateButton);
         testPanel.add(testLabel, BorderLayout.WEST);
         testPanel.add(testStringField, BorderLayout.CENTER);
-        testPanel.add(testButtonPanel, BorderLayout.EAST);
-        
-        // Add test panel to the main input panel
+        testPanel.add(testButtons, BorderLayout.EAST);
         add(testPanel, BorderLayout.SOUTH);
+        mainFrame.getFrame().getRootPane().setDefaultButton(visualizeButton);
     }
-    
-    /**
-     * Handle the DFA visualization button click
-     */
+
+    public JMenuBar createMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+        JMenu learn = new JMenu("Learn");
+        learn.setMnemonic('L');
+        JMenuItem walkthrough = new JMenuItem("Step-by-Step conversion");
+        walkthrough.addActionListener(e -> showStepByStepConversion());
+        learn.add(walkthrough);
+        JMenu tools = new JMenu("Tools");
+        tools.setMnemonic('T');
+        JMenuItem debug = new JMenuItem("Debug expression");
+        debug.addActionListener(this::debugRegex);
+        tools.add(debug);
+        JMenu help = new JMenu("Help");
+        help.setMnemonic('H');
+        JMenuItem theory = new JMenuItem("Automata theory");
+        theory.addActionListener(e -> showTheoryPopup());
+        help.add(theory);
+        JMenu view = new JMenu("View");
+        view.setMnemonic('V');
+        JMenuItem themes = new JMenuItem("Themes…");
+        themes.addActionListener(e -> mainFrame.showThemes());
+        view.add(themes);
+        menuBar.add(learn); menuBar.add(tools); menuBar.add(view); menuBar.add(help);
+        return menuBar;
+    }
+
     private void visualizeDfa(ActionEvent e) {
         String regex = regexField.getText().trim();
-        boolean minimizeDfa = minimizeDfaCheckbox.isSelected();
-        boolean minimizeNfa = minimizeNfaCheckbox.isSelected();
-        boolean showDeadStates = showDeadStatesCheckbox.isSelected();
-        boolean showSplitView = splitViewCheckbox.isSelected();
-        
-        // Get the controller from MainFrame
-        VisualizationController controller = mainFrame.getVisualizationController();
-        controller.visualizeDfa(regex, minimizeDfa, minimizeNfa, showDeadStates, showSplitView);
+        GraphControlsPanel controls = mainFrame.getGraphControls();
+        mainFrame.getVisualizationController().visualizeDfa(regex, controls.isDfaMinimized(), false,
+                controls.isHighlightDead(), controls.getCompareToggle().isSelected());
     }
     
-    /**
-     * Handle the debug button click
-     */
     private void debugRegex(ActionEvent e) {
         String regex = regexField.getText().trim();
         
-        // Get the controller from MainFrame
         VisualizationController controller = mainFrame.getVisualizationController();
         controller.debugRegex(regex);
     }
     
-    /**
-     * Handle the test string button click
-     */
     private void testString(ActionEvent e) {
-        String testString = testStringField.getText().trim();
+        String testString = testStringField.getText();
         
-        // Get the controller from MainFrame
         VisualizationController controller = mainFrame.getVisualizationController();
         controller.testString(testString);
     }
     
-    /**
-     * Handle the animate string button click
-     */
     private void animateString(ActionEvent e) {
-        String testString = testStringField.getText().trim();
+        String testString = testStringField.getText();
         
-        // Get the controller from MainFrame
         VisualizationController controller = mainFrame.getVisualizationController();
         controller.animateString(testString);
     }
     
-    /**
-     * Handle toggling grid snap for states
-     */
-    private void handleGridSnapToggle(ActionEvent e) {
-        boolean gridSnap = gridSnapCheckbox.isSelected();
-        
-        // Update grid snap setting in visualizers
-        mainFrame.getDfaVisualizer().setGridSnapEnabled(gridSnap);
-        
-        // Update any current DFA visualization
-        VisualizationPanel dfaPanel = mainFrame.getDfaPanel();
-        if (dfaPanel != null) {
-            JComponent dfaComponent = (JComponent) dfaPanel.getClientProperty("visualComponent");
-            if (dfaComponent instanceof com.mxgraph.swing.mxGraphComponent) {
-                com.mxgraph.swing.mxGraphComponent graphComponent = (com.mxgraph.swing.mxGraphComponent) dfaComponent;
-                graphComponent.setGridVisible(gridSnap);
-                
-                // Configure grid size and enable snapping
-                if (gridSnap) {
-                    graphComponent.getGraph().setGridSize(20);
-                    graphComponent.getGraph().setGridEnabled(true);
-                } else {
-                    graphComponent.getGraph().setGridEnabled(false);
-                }
-                
-                // Refresh the component to update the grid display
-                graphComponent.refresh();
-            }
-        }
-        
-        // Update NFA visualization if it exists
-        VisualizationPanel nfaPanel = mainFrame.getNfaPanel();
-        if (nfaPanel != null) {
-            JComponent nfaComponent = (JComponent) nfaPanel.getClientProperty("visualComponent");
-            if (nfaComponent instanceof com.mxgraph.swing.mxGraphComponent) {
-                com.mxgraph.swing.mxGraphComponent graphComponent = (com.mxgraph.swing.mxGraphComponent) nfaComponent;
-                graphComponent.setGridVisible(gridSnap);
-                
-                // Configure grid size and enable snapping
-                if (gridSnap) {
-                    graphComponent.getGraph().setGridSize(20);
-                    graphComponent.getGraph().setGridEnabled(true);
-                } else {
-                    graphComponent.getGraph().setGridEnabled(false);
-                }
-                
-                // Refresh the component to update the grid display
-                graphComponent.refresh();
-            }
-        }
-        
-        if (gridSnap) {
-            mainFrame.getStatusPanel().setStatus("Grid snap enabled - Grid size: 20px");
-        } else {
-            mainFrame.getStatusPanel().setStatus("Grid snap disabled");
-        }
-    }
-    
-    /**
-     * Handle toggling animation for self-loops
-     */
-    private void handleAnimateLoopsToggle(ActionEvent e) {
-        boolean animateLoops = animateLoopsCheckbox.isSelected();
-        
-        // Get the controller from MainFrame and set the loop animation state
-        VisualizationController controller = mainFrame.getVisualizationController();
-        if (controller != null) {
-            controller.setLoopAnimationEnabled(animateLoops);
-        }
-    }
-    
-    /**
-     * Show step-by-step conversion dialog
-     */
     private void showStepByStepConversion() {
         String regex = regexField.getText().trim();
         if (regex.isEmpty()) {
@@ -307,19 +154,16 @@ public class InputPanel extends JPanel {
             return;
         }
         
-        // Display step-by-step dialog (implementation may vary)
-        new StepByStepDialog(mainFrame, regex).display();
+        if (mainFrame.getVisualizationController().getAnimationController().isAnimationRunning())
+            mainFrame.getVisualizationController().getAnimationController().togglePause();
+        // Pause the main trace while the learner explores the conversion.
+        new StepByStepDialog(mainFrame, regex, testStringField.getText()).display();
     }
     
-    /**
-     * Show theory popup
-     */
     private void showTheoryPopup() {
-        // Display theory popup (implementation may vary)
         new TheoryPopupDialog(mainFrame).display();
     }
     
-    // Getters for components
     
     public JTextField getRegexField() {
         return regexField;
@@ -327,30 +171,6 @@ public class InputPanel extends JPanel {
     
     public JTextField getTestStringField() {
         return testStringField;
-    }
-    
-    public JCheckBox getSplitViewCheckbox() {
-        return splitViewCheckbox;
-    }
-    
-    public JCheckBox getMinimizeDfaCheckbox() {
-        return minimizeDfaCheckbox;
-    }
-    
-    public JCheckBox getMinimizeNfaCheckbox() {
-        return minimizeNfaCheckbox;
-    }
-    
-    public JCheckBox getShowDeadStatesCheckbox() {
-        return showDeadStatesCheckbox;
-    }
-    
-    public JCheckBox getGridSnapCheckbox() {
-        return gridSnapCheckbox;
-    }
-    
-    public JCheckBox getAnimateLoopsCheckbox() {
-        return animateLoopsCheckbox;
     }
     
     public JButton getAnimateButton() {

@@ -6,17 +6,6 @@ import com.dfavisualizer.model.DFA;
 import com.dfavisualizer.model.NFA;
 import com.dfavisualizer.model.OptimizedNFA;
 
-/**
- * Converts regular expressions to DFAs using a complete implementation of:
- * 1. Thompson's construction (regex -> NFA)
- * 2. Subset Construction (NFA -> DFA)
- * 3. Hopcroft's algorithm (DFA minimization)
- * 
- * This implementation includes:
- * - Memory-efficient algorithms for large regex patterns
- * - Direct DFA construction for certain regex patterns
- * - Optimized NFA construction
- */
 public class RegexToDfaConverter {
 
     private final RegexParser parser;
@@ -28,8 +17,8 @@ public class RegexToDfaConverter {
     private NFA lastNfa; // Store the last created NFA
     private DFA lastDfa; // Store the non-minimized DFA
     
-    // Flag to control whether to use optimized implementation
-    private boolean useOptimizedImplementation = true;
+    // Keep the main graph and learning walkthrough on the same Thompson construction.
+    private boolean useOptimizedImplementation = false;
 
     public RegexToDfaConverter() {
         this.parser = new RegexParser();
@@ -39,11 +28,6 @@ public class RegexToDfaConverter {
         this.optimizer = new RegexOptimizer();
     }
     
-    /**
-     * Sets whether to use the optimized implementation.
-     * 
-     * @param useOptimized true to use optimized algorithms, false to use original
-     */
     public void setUseOptimizedImplementation(boolean useOptimized) {
         this.useOptimizedImplementation = useOptimized;
     }
@@ -79,7 +63,6 @@ public class RegexToDfaConverter {
             throw new IllegalArgumentException("Regular expression cannot be null or empty.");
         }
 
-        // Validate regex syntax
         try {
             Pattern.compile(regex);
         } catch (Exception e) {
@@ -87,7 +70,6 @@ public class RegexToDfaConverter {
         }
 
         try {
-            // Use optimized implementation if enabled
             if (useOptimizedImplementation) {
                 return convertRegexToDfaOptimized(regex);
             } else {
@@ -98,30 +80,19 @@ public class RegexToDfaConverter {
         }
     }
     
-    /**
-     * Converts a regular expression to a DFA using the original implementation.
-     */
     private DFA convertRegexToDfaOriginal(String regex) {
-        // Step 1: Parse the regex and build an NFA using Thompson's construction
         lastNfa = parser.parse(regex);
         
-        // Step 2: Convert the NFA to a DFA using subset construction
         lastDfa = subsetConstruction.convertNfaToDfa(lastNfa);
         
-        // Step 3: Minimize the DFA using Hopcroft's algorithm
         DFA minimizedDfa = minimizer.minimize(lastDfa);
         
         return minimizedDfa;
     }
     
-    /**
-     * Converts a regular expression to a DFA using the optimized implementation.
-     */
     private DFA convertRegexToDfaOptimized(String regex) {
-        // Check if we can directly convert to DFA
         if (optimizer.canDirectlyConvertToDfa(regex)) {
             try {
-                // Direct construction without going through NFA
                 DFA directDfa = optimizer.constructDfaDirectly(regex);
                 
                 // For intermediate visualization, create a simple NFA and DFA
@@ -129,7 +100,6 @@ public class RegexToDfaConverter {
                 lastNfa = createSimpleNfaFromDfa(directDfa);
                 lastDfa = directDfa;
                 
-                // Minimize the DFA
                 return minimizer.minimize(directDfa);
             } catch (Exception e) {
                 // If direct construction fails, fall back to the optimized NFA approach
@@ -137,9 +107,7 @@ public class RegexToDfaConverter {
             }
         }
         
-        // Try using the optimized parser for complex regexes
         try {
-            // Use optimized parsing that creates fewer states and transitions
             DFA optimizedDfa = optimizedParser.parseToDfa(regex);
             
             // For intermediate visualization, we need to create a conventional NFA
@@ -148,7 +116,6 @@ public class RegexToDfaConverter {
             lastNfa = optNfa.toConventionalNFA();
             lastDfa = optimizedDfa;
             
-            // Minimize the DFA and return
             return minimizer.minimize(optimizedDfa);
         } catch (Exception e) {
             // If optimized parsing fails, fall back to original implementation
@@ -164,16 +131,13 @@ public class RegexToDfaConverter {
     private NFA createSimpleNfaFromDfa(DFA dfa) {
         NFA nfa = new NFA();
         
-        // Create states for each DFA state
         for (DFA.State dfaState : dfa.getStates()) {
             int nfaState = Integer.parseInt(dfaState.getName().substring(1));
             
-            // Ensure state exists in NFA
             while (nfa.getStates().size() <= nfaState) {
                 nfa.createState();
             }
             
-            // Mark start and accept states
             if (dfaState.equals(dfa.getStartState())) {
                 nfa.setStartState(nfaState);
             }
@@ -183,7 +147,6 @@ public class RegexToDfaConverter {
             }
         }
         
-        // Add NFA transitions for each DFA transition
         for (Map.Entry<DFA.StateTransition, DFA.State> entry : dfa.getTransitions().entrySet()) {
             DFA.StateTransition transition = entry.getKey();
             DFA.State targetState = entry.getValue();
@@ -211,7 +174,6 @@ public class RegexToDfaConverter {
             throw new IllegalArgumentException("Regular expression cannot be null or empty.");
         }
 
-        // Validate regex syntax
         try {
             Pattern.compile(regex);
         } catch (Exception e) {
@@ -219,14 +181,10 @@ public class RegexToDfaConverter {
         }
 
         try {
-            // Use optimized implementation if enabled
             if (useOptimizedImplementation) {
-                // Try using the optimized parser for complex regexes
                 try {
-                    // Use optimized parsing that creates fewer states and transitions
                     DFA optimizedDfa = optimizedParser.parseToDfa(regex);
                     
-                    // For intermediate visualization, we need to create a conventional NFA
                     OptimizedNFA optNfa = optimizedParser.parseToOptimizedNfa(regex);
                     lastNfa = optNfa.toConventionalNFA();
                     lastDfa = optimizedDfa;
@@ -245,15 +203,9 @@ public class RegexToDfaConverter {
         }
     }
 
-    /**
-     * Converts a regular expression to a DFA using the original implementation,
-     * but without applying minimization.
-     */
     private DFA convertRegexToDfaOriginalWithoutMinimization(String regex) {
-        // Step 1: Parse the regex and build an NFA using Thompson's construction
         lastNfa = parser.parse(regex);
         
-        // Step 2: Convert the NFA to a DFA using subset construction
         lastDfa = subsetConstruction.convertNfaToDfa(lastNfa);
         
         return lastDfa;

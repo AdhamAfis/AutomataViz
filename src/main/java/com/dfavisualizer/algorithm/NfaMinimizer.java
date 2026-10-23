@@ -20,27 +20,15 @@ public class NfaMinimizer {
         this.dfaMinimizer = new DfaMinimizer();
     }
     
-    /**
-     * Minimizes an NFA by:
-     * 1. Converting it to a DFA using subset construction
-     * 2. Minimizing the DFA using Hopcroft's algorithm
-     * 3. Converting the minimized DFA back to a simplified NFA representation
-     * 
-     * @param nfa The NFA to minimize
-     * @return A minimized NFA that is equivalent to the input NFA
-     */
     public NFA minimizeNfa(NFA nfa) {
         if (nfa == null) {
             throw new IllegalArgumentException("NFA cannot be null");
         }
         
-        // Step 1: Convert NFA to DFA using subset construction
         DFA dfa = subsetConstruction.convertNfaToDfa(nfa);
         
-        // Step 2: Minimize the DFA using Hopcroft's algorithm
         DFA minimizedDfa = dfaMinimizer.minimize(dfa);
         
-        // Step 3: Convert the minimized DFA back to an NFA representation
         return createSimpleNfaFromDfa(minimizedDfa);
     }
     
@@ -51,16 +39,13 @@ public class NfaMinimizer {
     private NFA createSimpleNfaFromDfa(DFA dfa) {
         NFA nfa = new NFA();
         
-        // Create states for each DFA state
         for (DFA.State dfaState : dfa.getStates()) {
             int nfaState = Integer.parseInt(dfaState.getName().substring(1));
             
-            // Ensure state exists in NFA
             while (nfa.getStates().size() <= nfaState) {
                 nfa.createState();
             }
             
-            // Mark start and accept states
             if (dfaState.equals(dfa.getStartState())) {
                 nfa.setStartState(nfaState);
             }
@@ -70,7 +55,6 @@ public class NfaMinimizer {
             }
         }
         
-        // Add NFA transitions for each DFA transition
         for (DFA.StateTransition transition : dfa.getTransitions().keySet()) {
             DFA.State sourceState = transition.getState();
             char symbol = transition.getSymbol();

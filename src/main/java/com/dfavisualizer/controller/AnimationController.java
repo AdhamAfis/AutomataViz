@@ -1,559 +1,271 @@
 package com.dfavisualizer.controller;
 
-import java.util.Timer;
-import java.util.TimerTask;
-
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import javax.swing.JComponent;
 import javax.swing.JOptionPane;
-import javax.swing.SwingUtilities;
-
+import javax.swing.Timer;
 import com.dfavisualizer.model.DFA;
+import com.dfavisualizer.ui.AutomataGraph;
 import com.dfavisualizer.ui.MainFrame;
+import com.dfavisualizer.ui.UiTheme;
 import com.mxgraph.model.mxCell;
-import com.mxgraph.model.mxGeometry;
 import com.mxgraph.swing.mxGraphComponent;
 import com.mxgraph.util.mxConstants;
-import com.mxgraph.view.mxGraph;
 
-/**
- * Controller that handles animations of automata processing strings.
- */
+/** Plays one DFA transition at a time on the Swing event thread. */
 public class AnimationController {
-    private MainFrame mainFrame;
-    private Timer animationTimer;
-    private static final int ANIMATION_DELAY = 800; // milliseconds between animation steps
-    private boolean animationRunning = false;
-    
-    // Animation state
-    private String inputString;
-    private int currentPosition;
+    private final MainFrame mainFrame;
+    private final Timer timer;
+    private AutomataGraph graph;
+    private DFA dfa;
+    private String input;
+    private int position;
     private DFA.State currentState;
-    private mxGraphComponent graphComponent;
-    private mxGraph graph;
-    private mxCell currentStateCell;
-    private mxCell currentEdgeCell;
-    
-    // Loop animation
-    private LoopAnimator loopAnimator;
-    private boolean loopAnimationEnabled = true;
-    
-    /**
-     * Constructor - initializes the animation controller
-     * 
-     * @param mainFrame The main application frame
-     */
+    private DFA.State nextState;
+    private mxCell edge;
+    private boolean paused;
+    private boolean finished;
+    private double speed = 1;
+    private double elapsed;
+    private long lastTick;
+    private String explanation;
+    private boolean focusMode = true;
+    private final List<DFA.State> history = new ArrayList<>();
+
     public AnimationController(MainFrame mainFrame) {
         this.mainFrame = mainFrame;
+        timer = new Timer(16, e -> tick());
+        mainFrame.getStatusPanel().bindPlayback(this);
     }
-    
-    /**
-     * Animate the processing of a string through a DFA
-     * 
-     * @param testString The string to animate
-     * @return True if the animation was started successfully
-     */
+
     public boolean animateString(String testString) {
-        DFA currentDfa = mainFrame.getCurrentDfa();
-        if (currentDfa == null) {
-            JOptionPane.showMessageDialog(mainFrame.getFrame(), 
-                    "Please create a DFA first by entering a regex and clicking 'Visualize DFA'.",
+        if (mainFrame.getCurrentDfa() == null) {
+            JOptionPane.showMessageDialog(mainFrame.getFrame(), "Create a DFA before animating a string.",
                     "No DFA Available", JOptionPane.WARNING_MESSAGE);
             return false;
         }
-        
-        if (testString.isEmpty()) {
-            JOptionPane.showMessageDialog(mainFrame.getFrame(), "Please enter a string to animate.", 
-                    "Empty Test String", JOptionPane.WARNING_MESSAGE);
+        JComponent component = mainFrame.getDfaPanel().getVisualizationComponent();
+        if (!(component instanceof AutomataGraph)) {
+            mainFrame.getStatusPanel().setStatus("Cannot animate: DFA graph is not available.");
             return false;
         }
-        
-        // If another animation is running, stop it first
         stopAnimation();
-        
-        try {
-            // Get the visualization component (we'll assume it's in the central panel)
-            JComponent component = (JComponent) mainFrame.getDfaPanel().getClientProperty("visualComponent");
-            if (!(component instanceof mxGraphComponent)) {
-                JOptionPane.showMessageDialog(mainFrame.getFrame(), 
-                        "Cannot animate: DFA visualization not available.",
-                        "Animation Error", JOptionPane.ERROR_MESSAGE);
-                return false;
-            }
-            
-            graphComponent = (mxGraphComponent) component;
-            graph = graphComponent.getGraph();
-            
-            // Initialize loop animator if needed
-            if (loopAnimator == null && loopAnimationEnabled) {
-                loopAnimator = new LoopAnimator(graphComponent);
-            }
-            
-            // Reset any styling from previous animations
-            mainFrame.getDfaVisualizer().resetAllStyles();
-            
-            // Initialize animation state
-            inputString = testString;
-            currentPosition = 0;
-            currentState = currentDfa.getStartState();
-            currentStateCell = findCellForState(currentState);
-            currentEdgeCell = null;
-            
-            if (currentStateCell == null) {
-                JOptionPane.showMessageDialog(mainFrame.getFrame(), 
-                        "Cannot animate: Unable to find start state in the visualization.",
-                        "Animation Error", JOptionPane.ERROR_MESSAGE);
-                return false;
-            }
-            
-            // Update status panel
-            mainFrame.getStatusPanel().setStatus("Animation started for string: " + testString);
-            
-            // Start animation
-            startAnimation();
-            return true;
-            
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(mainFrame.getFrame(), 
-                    "Error starting animation: " + ex.getMessage(),
-                    "Animation Error", JOptionPane.ERROR_MESSAGE);
-            return false;
+        graph = (AutomataGraph) component;
+        graph.putClientProperty("playback.active", true);
+        dfa = mainFrame.getCurrentDfa();
+        input = testString;
+        position = 0;
+        currentState = dfa.getStartState();
+        history.clear();
+        history.add(currentState);
+        nextState = null;
+        edge = null;
+        paused = false;
+        finished = false;
+        elapsed = 0;
+        highlightState();
+        explanation = "Start at " + currentState + ". " + preview();
+        if (input.isEmpty()) finish();
+        else {
+            update();
+            lastTick = System.nanoTime();
+            timer.start();
         }
+        mainFrame.showPlayback();
+        if (focusMode) graph.revealState(graph.state(currentState.getName()), true);
+        return true;
     }
-    
-    /**
-     * Start the animation timer
-     */
-    private void startAnimation() {
-        if (animationRunning) {
-            return;
-        }
-        
-        animationRunning = true;
-        
-        // Highlight the start state
-        highlightCurrentState();
-        
-        // Create and start the animation timer
-        animationTimer = new Timer(true);
-        animationTimer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                SwingUtilities.invokeLater(() -> animationStep());
-            }
-        }, ANIMATION_DELAY, ANIMATION_DELAY);
-    }
-    
-    /**
-     * Stop the current animation
-     */
-    public void stopAnimation() {
-        if (animationTimer != null) {
-            animationTimer.cancel();
-            animationTimer = null;
-        }
-        
-        animationRunning = false;
-        
-        // Stop loop animations if they're active
-        if (loopAnimator != null) {
-            loopAnimator.stopAllAnimations();
-        }
-        
-        // Reset styling if a graph is available
-        if (graph != null) {
-            resetStyles();
-        }
-    }
-    
-    /**
-     * Perform a single step of the animation
-     */
-    private void animationStep() {
-        if (currentPosition >= inputString.length()) {
-            // Animation complete
-            finishAnimation();
-            return;
-        }
-        
-        // Get the current input symbol
-        char symbol = inputString.charAt(currentPosition);
-        
-        // Find the next state
-        DFA currentDfa = mainFrame.getCurrentDfa();
-        
-        // Check if the symbol is in the DFA's alphabet
-        if (!currentDfa.getAlphabet().contains(symbol)) {
-            // Symbol not in alphabet
-            mainFrame.getStatusPanel().appendStatus("Symbol '" + symbol + "' is not in the alphabet of the regular expression. String rejected.");
-            finishAnimation();
-            return;
-        }
-        
-        DFA.State nextState = currentDfa.getTransitionTarget(currentState, symbol);
-        
+
+    private void tick() {
+        long now = System.nanoTime();
+        elapsed += (now - lastTick) / 1_000_000.0 * speed;
+        lastTick = now;
         if (nextState == null) {
-            // No valid transition - string rejected
-            mainFrame.getStatusPanel().appendStatus("No transition found for symbol: " + symbol + 
-                    " from state: " + currentState + ". String rejected.");
-            finishAnimation();
+            if (elapsed >= 900) beginTransition();
+        } else {
+            double progress = Math.min(1, elapsed / 700);
+            graph.showToken(edge, progress);
+            if (progress >= 1) arrive();
+        }
+    }
+
+    private void beginTransition() {
+        if (finished || input == null) return;
+        if (position == input.length()) { finish(); return; }
+        char symbol = input.charAt(position);
+        String label = AutomataGraph.symbolLabel(symbol);
+        if (!dfa.getAlphabet().contains(symbol)) {
+            reject("Symbol '" + label + "' at position " + (position + 1) + " is outside the DFA alphabet. " + expected());
             return;
         }
-        
-        // Find the transition edge and target state cell
-        currentEdgeCell = findEdgeCell(currentState, nextState, symbol);
-        mxCell nextStateCell = findCellForState(nextState);
-        
-        if (currentEdgeCell != null) {
-            // Highlight the transition
-            highlightTransition(currentEdgeCell);
+        nextState = dfa.getTransitionTarget(currentState, symbol);
+        if (nextState == null) {
+            reject("No transition leaves " + currentState + " for '" + label + "' at position " + (position + 1) + ". " + expected());
+            return;
         }
-        
-        // Check for self-loop animation
-        boolean isSelfLoop = currentState.equals(nextState);
-        if (isSelfLoop && loopAnimator != null && loopAnimationEnabled) {
-            // Find loop badge (assuming it exists)
-            Object loopBadge = findLoopBadge(currentStateCell);
-            if (loopBadge != null) {
-                loopAnimator.animateLoop(currentStateCell, loopBadge);
-            }
+        edge = graph.transition(currentState.getName(), nextState.getName(), symbol);
+        if (edge == null) {
+            timer.stop();
+            finished = true;
+            explanation = "Playback stopped: the displayed graph is missing the model's transition.";
+            update();
+            return;
         }
-        
-        // Update status
-        mainFrame.getStatusPanel().appendStatus("Step " + (currentPosition + 1) + ": " + 
-                currentState + " --[" + symbol + "]--> " + nextState);
-        
-        // Update current state
+        graph.restoreStyles();
+        highlightState();
+        graph.getGraph().setCellStyles(mxConstants.STYLE_STROKECOLOR, UiTheme.ACTIVE_EDGE, new Object[] {edge});
+        graph.getGraph().setCellStyles(mxConstants.STYLE_FONTCOLOR, UiTheme.ACTIVE_EDGE, new Object[] {edge});
+        graph.getGraph().setCellStyles(mxConstants.STYLE_STROKEWIDTH, "3", new Object[] {edge});
+        graph.showToken(edge, 0);
+        elapsed = 0;
+        explanation = "Step " + (position + 1) + ": read '" + label + "' — " + currentState + " → " + nextState
+                + (currentState.equals(nextState) ? ". This self-loop consumes the symbol and stays in the same state." : ". Follow the highlighted arrow.");
+        update();
+        if (focusMode) graph.revealState(graph.state(nextState.getName()), false);
+    }
+
+    private void arrive() {
+        String source = currentState.toString();
+        boolean deadDestination = dfa.getDeadStates().contains(nextState);
+        String expectedBefore = deadDestination ? expected() : "";
+        char symbol = input.charAt(position);
         currentState = nextState;
-        currentStateCell = nextStateCell;
-        currentPosition++;
-        
-        // Highlight the new current state
-        highlightCurrentState();
-        
-        // If we've reached the end of the string, check if we're in an accept state
-        if (currentPosition >= inputString.length()) {
-            boolean accepted = currentDfa.getAcceptStates().contains(currentState);
-            String result = "String \"" + inputString + "\": " + (accepted ? "ACCEPTED" : "REJECTED");
-            mainFrame.getStatusPanel().appendStatus(result);
-            
-            // If we've processed the entire string, finish the animation
-            // This ensures animation continues to show each transition first
-            finishAnimation();
-        }
+        nextState = null;
+        position++;
+        history.add(currentState);
+        elapsed = 0;
+        graph.clearToken();
+        graph.restoreStyles();
+        highlightState();
+        explanation = "Step " + position + ": " + source + " — '" + AutomataGraph.symbolLabel(symbol) + "' → "
+                + currentState + ". " + position + " of " + input.length() + " symbols consumed.";
+        if (deadDestination) reject("Reading '" + AutomataGraph.symbolLabel(symbol) + "' from " + source
+                + " enters " + currentState + ", a dead state: no continuation can reach acceptance. " + expectedBefore);
+        else if (position == input.length()) finish();
+        else { explanation += " " + preview(); update(); }
     }
-    
-    /**
-     * Finish the animation and display the result
-     */
-    private void finishAnimation() {
-        // Stop the timer
-        if (animationTimer != null) {
-            animationTimer.cancel();
-            animationTimer = null;
-        }
-        
-        animationRunning = false;
-        
-        // Stop any active loop animations
-        if (loopAnimator != null) {
-            loopAnimator.stopAllAnimations();
-        }
-        
-        DFA currentDfa = mainFrame.getCurrentDfa();
-        
-        // String is only accepted if we've processed the entire input AND ended in an accept state
-        boolean accepted = currentPosition >= inputString.length() && 
-                          currentDfa.getAcceptStates().contains(currentState);
-        
-        // Apply special styling to show final result
-        if (accepted) {
-            // Use green for accept state
-            graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, "#90EE90", new Object[]{currentStateCell});
-            graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#006400", new Object[]{currentStateCell});
-            graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "3", new Object[]{currentStateCell});
-            
-            // Show completion message
-            JOptionPane.showMessageDialog(mainFrame.getFrame(), 
-                    "Animation complete. String \"" + inputString + "\" ACCEPTED", 
-                    "Animation Result", JOptionPane.INFORMATION_MESSAGE);
-        } else {
-            // Use red for reject state
-            graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, "#FFB6C1", new Object[]{currentStateCell});
-            graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#8B0000", new Object[]{currentStateCell});
-            graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "3", new Object[]{currentStateCell});
-            
-            // Determine the specific reason for rejection
-            String rejectionReason = "";
-            if (currentPosition < inputString.length()) {
-                char symbol = inputString.charAt(currentPosition);
-                if (!currentDfa.getAlphabet().contains(symbol)) {
-                    rejectionReason = "\nReason: Symbol '" + symbol + "' is not in the alphabet of the regular expression.";
-                } else {
-                    rejectionReason = "\nReason: No valid transition from state " + currentState + " on symbol '" + symbol + "'.";
-                }
-            }
-            
-            // Show completion message with the specific reason
-            JOptionPane.showMessageDialog(mainFrame.getFrame(), 
-                    "Animation complete. String \"" + inputString + "\" REJECTED" + rejectionReason, 
-                    "Animation Result", JOptionPane.WARNING_MESSAGE);
-        }
-        
-        // Refresh the graph
-        graph.refresh();
+
+    private void finish() {
+        if (dfa.getAcceptStates().contains(currentState)) {
+            explanation = "ACCEPTED — all " + input.length() + " symbols consumed; " + currentState + " is an accepting state (double ring).";
+            complete(true);
+        } else reject("All input was consumed, but " + currentState + " is not an accepting state. " + expected());
     }
-    
-    /**
-     * Highlight the current state in the visualization
-     */
-    private void highlightCurrentState() {
-        if (currentStateCell != null && graph != null) {
-            // Reset any previous styling
-            mainFrame.getDfaVisualizer().resetAllStyles();
-            
-            // Apply highlight styling
-            graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, "#87CEFA", new Object[]{currentStateCell});
-            graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#0000CD", new Object[]{currentStateCell});
-            graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "3", new Object[]{currentStateCell});
-            
-            // If there's a current edge, highlight it too
-            if (currentEdgeCell != null) {
-                highlightTransition(currentEdgeCell);
-            }
-            
-            graph.refresh();
-            
-            // Center the view on the current state
-            graphComponent.scrollCellToVisible(currentStateCell, true);
-        }
+
+    private void reject(String reason) {
+        explanation = "REJECTED — " + reason;
+        complete(false);
     }
-    
-    /**
-     * Highlight a transition in the visualization
-     * 
-     * @param edgeCell The edge cell to highlight
-     */
-    private void highlightTransition(mxCell edgeCell) {
-        if (edgeCell != null && graph != null) {
-            graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#FF0000", new Object[]{edgeCell});
-            graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "3", new Object[]{edgeCell});
-            graph.setCellStyles(mxConstants.STYLE_FONTCOLOR, "#FF0000", new Object[]{edgeCell});
-            graph.setCellStyles(mxConstants.STYLE_FONTSIZE, "14", new Object[]{edgeCell});
-            graph.refresh();
-        }
+
+    private void complete(boolean accepted) {
+        timer.stop();
+        finished = true;
+        nextState = null;
+        graph.clearToken();
+        graph.restoreStyles();
+        mxCell state = graph.state(currentState.getName());
+        graph.getGraph().setCellStyles(mxConstants.STYLE_STROKECOLOR, accepted ? UiTheme.START_STROKE : UiTheme.DEAD_STROKE, new Object[] {state});
+        graph.getGraph().setCellStyles(mxConstants.STYLE_STROKEWIDTH, "4", new Object[] {state});
+        update();
     }
-    
-    /**
-     * Find the graph cell representing a DFA state
-     * 
-     * @param state The DFA state to find
-     * @return The corresponding mxCell or null if not found
-     */
-    private mxCell findCellForState(DFA.State state) {
-        Object[] vertices = graph.getChildVertices(graph.getDefaultParent());
-        for (Object vertex : vertices) {
-            if (vertex instanceof mxCell) {
-                mxCell cell = (mxCell) vertex;
-                if (cell.getValue() != null && cell.getValue().toString().equals(state.toString())) {
-                    return cell;
-                }
-            }
-        }
-        return null;
+
+    private void highlightState() {
+        mxCell state = graph.state(currentState.getName());
+        graph.getGraph().setCellStyles(mxConstants.STYLE_STROKECOLOR, UiTheme.ACTIVE_STATE, new Object[] {state});
+        graph.getGraph().setCellStyles(mxConstants.STYLE_STROKEWIDTH, "4", new Object[] {state});
     }
-    
-    /**
-     * Find the graph edge representing a transition between states
-     * 
-     * @param source The source state
-     * @param target The target state
-     * @param symbol The transition symbol
-     * @return The corresponding mxCell edge or null if not found
-     */
-    private mxCell findEdgeCell(DFA.State source, DFA.State target, char symbol) {
-        mxCell sourceCell = findCellForState(source);
-        mxCell targetCell = findCellForState(target);
-        
-        if (sourceCell == null || targetCell == null) {
-            return null;
-        }
-        
-        Object[] edges = graph.getChildEdges(graph.getDefaultParent());
-        for (Object edge : edges) {
-            if (edge instanceof mxCell) {
-                mxCell cell = (mxCell) edge;
-                if (cell.isEdge() && 
-                    cell.getSource() == sourceCell && 
-                    cell.getTarget() == targetCell && 
-                    cell.getValue() != null && 
-                    cell.getValue().toString().contains(String.valueOf(symbol))) {
-                    return cell;
-                }
-            }
-        }
-        return null;
+
+    private void update() {
+        mainFrame.getStatusPanel().setStatus((paused && !finished ? "Paused. " : "") + explanation);
+        graph.focusOn(Set.of(graph.state(currentState.getName())), focusMode);
+        mainFrame.getStatusPanel().showPlayback(input, position, paused, finished, position > 0 || nextState != null);
     }
-    
-    /**
-     * Find a loop badge associated with a state cell
-     * 
-     * @param stateCell The state cell to find a loop badge for
-     * @return The loop badge cell or null if not found
-     */
-    private Object findLoopBadge(mxCell stateCell) {
-        if (stateCell == null || graph == null) {
-            System.out.println("Cannot find loop badge: null state cell or graph");
-            return null;
-        }
-        
-        System.out.println("Finding loop badge for state: " + stateCell.getValue());
-        
-        // First, check direct connections from this state to badges
-        Object[] edges = graph.getEdges(stateCell);
-        if (edges != null) {
-            for (Object edge : edges) {
-                mxCell edgeCell = (mxCell) edge;
-                Object target = edgeCell.getTarget();
-                
-                // Check if this is pointing to a loop badge
-                if (target instanceof mxCell && 
-                    ((mxCell)target).getValue() != null &&
-                    ((mxCell)target).getValue().toString().startsWith("↻")) {
-                    System.out.println("Found loop badge: " + ((mxCell)target).getValue());
-                    return target;
-                }
-            }
-        }
-        
-        // If no direct connection, search all cells
-        Object[] allCells = graph.getChildCells(graph.getDefaultParent(), true, true);
-        for (Object cell : allCells) {
-            if (cell instanceof mxCell) {
-                mxCell mxcell = (mxCell) cell;
-                if (mxcell.getValue() != null && 
-                    mxcell.getValue().toString().startsWith("↻") && 
-                    mxcell.getStyle() != null && 
-                    mxcell.getStyle().contains("LOOP_BADGE")) {
-                    
-                    // For badges without connections, use geometric proximity
-                    mxGeometry stateGeom = graph.getCellGeometry(stateCell);
-                    mxGeometry badgeGeom = graph.getCellGeometry(mxcell);
-                    
-                    if (stateGeom != null && badgeGeom != null) {
-                        // Check if badge is near this state
-                        double distance = Math.sqrt(
-                            Math.pow(stateGeom.getCenterX() - badgeGeom.getCenterX(), 2) +
-                            Math.pow(stateGeom.getCenterY() - badgeGeom.getCenterY(), 2)
-                        );
-                        
-                        if (distance < stateGeom.getWidth() * 1.5) {
-                            System.out.println("Found nearby loop badge: " + mxcell.getValue());
-                            return mxcell;
-                        }
-                    }
-                    
-                    // Also check for connecting edges
-                    Object[] badgeEdges = graph.getEdges(mxcell);
-                    for (Object edge : badgeEdges) {
-                        mxCell edgeCell = (mxCell) edge;
-                        if ((edgeCell.getSource() == stateCell && edgeCell.getTarget() == mxcell) ||
-                            (edgeCell.getSource() == mxcell && edgeCell.getTarget() == stateCell)) {
-                            System.out.println("Found connected loop badge: " + mxcell.getValue());
-                            return mxcell;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // If we still couldn't find a badge, look for self-loops in the graph
-        for (Object edge : graph.getChildEdges(graph.getDefaultParent())) {
-            mxCell edgeCell = (mxCell) edge;
-            if (edgeCell.getSource() == stateCell && edgeCell.getTarget() == stateCell) {
-                // This is a self-loop edge, we can animate directly with the state
-                System.out.println("Found self-loop edge for state: " + stateCell.getValue());
-                return stateCell; // Use the state itself as the badge
-            }
-        }
-        
-        System.out.println("No loop badge found for state: " + stateCell.getValue());
-        return null;
+
+    public void refreshTheme() { if (input != null) update(); }
+
+    public void togglePause() {
+        if (input == null || finished) return;
+        paused = !paused;
+        if (paused) timer.stop();
+        else { lastTick = System.nanoTime(); timer.start(); }
+        update();
     }
-    
-    /**
-     * Check if an animation is currently running
-     * 
-     * @return True if an animation is running
-     */
-    public boolean isAnimationRunning() {
-        return animationRunning;
+
+    public void stepForward() {
+        if (input == null || finished) return;
+        timer.stop();
+        paused = true;
+        if (nextState == null) beginTransition();
+        if (!finished && nextState != null) arrive();
     }
-    
-    /**
-     * Get the component used for visualization
-     * 
-     * @return The mxGraphComponent for visualization
-     */
-    public mxGraphComponent getGraphComponent() {
-        return graphComponent;
+
+    private String preview() {
+        if (position >= input.length()) return "All input consumed.";
+        char symbol = input.charAt(position);
+        DFA.State target = dfa.getTransitionTarget(currentState, symbol);
+        return "Next character: '" + AutomataGraph.symbolLabel(symbol) + "'. From " + currentState
+                + (target == null ? ", no matching transition. " + expected()
+                : ", take the matching arrow to " + target + ".");
     }
-    
-    /**
-     * Set whether loop animation is enabled
-     * 
-     * @param enabled True to enable loop animation, false to disable
-     */
-    public void setLoopAnimationEnabled(boolean enabled) {
-        this.loopAnimationEnabled = enabled;
+
+    private String expected() {
+        Set<Character> symbols = new TreeSet<>();
+        Set<DFA.State> dead = dfa.getDeadStates();
+        dfa.getTransitions().forEach((transition, target) -> {
+            if (transition.getState().equals(currentState) && !dead.contains(target)) symbols.add(transition.getSymbol());
+        });
+        return "Read prefix '" + input.substring(0, position) + "'. Expected "
+                + (symbols.isEmpty() ? "no continuation that can reach acceptance."
+                : "one of " + AutomataGraph.symbolsLabel(symbols) + " to stay on a path to acceptance.");
     }
-    
-    /**
-     * Check if loop animation is enabled
-     * 
-     * @return True if loop animation is enabled
-     */
-    public boolean isLoopAnimationEnabled() {
-        return loopAnimationEnabled;
+
+    public void stepBack() {
+        if (input == null || (position == 0 && nextState == null)) return;
+        timer.stop();
+        paused = true;
+        finished = false;
+        nextState = null;
+        edge = null;
+        elapsed = 0;
+        if (position > 0) position--;
+        while (history.size() > position + 1) history.remove(history.size() - 1);
+        currentState = history.get(position);
+        graph.restoreStyles();
+        highlightState();
+        explanation = "Back to " + currentState + ". " + position + " of " + input.length() + " symbols consumed. " + preview();
+        update();
+        if (focusMode) graph.revealState(graph.state(currentState.getName()), false);
     }
-    
-    /**
-     * Reset any styling from animations
-     */
-    private void resetStyles() {
-        if (graph != null) {
-            // Reset all cells to their default styles
-            // For vertices (states)
-            Object[] vertices = graph.getChildVertices(graph.getDefaultParent());
-            for (Object vertex : vertices) {
-                resetCellStyle(graph, vertex);
-            }
-            
-            // For edges (transitions)
-            Object[] edges = graph.getChildEdges(graph.getDefaultParent());
-            for (Object edge : edges) {
-                resetCellStyle(graph, edge);
-            }
-            
-            graph.refresh();
-        }
+
+    public void setFocusMode(boolean enabled) {
+        focusMode = enabled;
+        if (graph == null) return;
+        graph.stopFollowing();
+        update();
+        if (enabled) graph.revealState(graph.state(currentState.getName()), true);
+        else mainFrame.getDfaPanel().fitView();
     }
-    
-    /**
-     * Reset the style of a cell
-     * 
-     * @param graph The graph
-     * @param cell The cell to reset
-     */
-    private void resetCellStyle(mxGraph graph, Object cell) {
-        if (graph.getModel().isVertex(cell)) {
-            graph.setCellStyles(mxConstants.STYLE_FILLCOLOR, "#E6F2FF", new Object[] { cell });
-            graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#444444", new Object[] { cell });
-            graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "1.5", new Object[] { cell });
-        } else if (graph.getModel().isEdge(cell)) {
-            graph.setCellStyles(mxConstants.STYLE_STROKECOLOR, "#666666", new Object[] { cell });
-            graph.setCellStyles(mxConstants.STYLE_FONTCOLOR, "#666666", new Object[] { cell });
-            graph.setCellStyles(mxConstants.STYLE_STROKEWIDTH, "1.5", new Object[] { cell });
-            graph.setCellStyles(mxConstants.STYLE_FONTSIZE, "12", new Object[] { cell });
-        }
+
+    public void restart() { if (input != null) animateString(input); }
+    public void setSpeed(double multiplier) {
+        if (!Double.isFinite(multiplier) || multiplier <= 0) throw new IllegalArgumentException("Playback speed must be positive");
+        speed = multiplier;
     }
-} 
+
+    public void stopAnimation() {
+        timer.stop();
+        if (graph != null) { graph.putClientProperty("playback.active", null); graph.stopFollowing(); graph.restoreStyles(); }
+        graph = null;
+        dfa = null;
+        input = null;
+        nextState = null;
+        edge = null;
+        mainFrame.getStatusPanel().hidePlayback();
+    }
+
+    public boolean isAnimationRunning() { return timer.isRunning(); }
+    public mxGraphComponent getGraphComponent() { return graph; }
+}

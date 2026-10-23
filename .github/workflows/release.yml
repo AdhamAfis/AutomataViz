@@ -3,39 +3,48 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'  # Run workflow on version tags, e.g. v1.0.0
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         
       - name: Set up JDK 11
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v5
         with:
           java-version: '11'
           distribution: 'temurin'
           cache: maven
           
       - name: Build with Maven
-        run: mvn clean package -DskipTests
+        run: mvn --batch-mode --no-transfer-progress clean package
         
-      - name: Get version from tag
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Check core algorithms
+        run: |
+          java -ea -Djava.awt.headless=true -cp "target/test-classes:target/*" com.dfavisualizer.algorithm.LearningRegexCheck
+          java -ea -Djava.awt.headless=true -cp "target/test-classes:target/*" com.dfavisualizer.algorithm.RegexAlternativesCheck
         
       - name: Create Release
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          name: AutomataViz ${{ steps.get_version.outputs.VERSION }}
+          name: AutomataViz ${{ github.ref_name }}
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
-          files: |
-            target/AutomataViz-*.jar
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          fail_on_unmatched_files: true
+          files: target/AutomataViz-*-jar-with-dependencies.jar
