@@ -25,7 +25,7 @@ To build the current source, install Maven and run from the repository root:
 
 ```sh
 mvn clean package
-java -jar target/AutomataViz-1.0-SNAPSHOT-jar-with-dependencies.jar
+java -jar target/AutomataViz-1.1.0-jar-with-dependencies.jar
 ```
 
 ## Try an expression
@@ -36,6 +36,7 @@ Supported syntax includes `|`, `*`, `+`, `?`, groups, character classes, and `.`
 
 ## Documentation
 
+- [Release notes](CHANGELOG.md)
 - [User guide](docs/USAGE.md)
 - [Build and interaction checks](docs/TESTING.md)
 - [Contributing](CONTRIBUTING.md) · [Security reports](SECURITY.md)
