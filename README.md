@@ -25,7 +25,7 @@ To build the current source, install Maven and run from the repository root:
 
 ```sh
 mvn clean package
-java -jar target/AutomataViz-1.1.0-jar-with-dependencies.jar
+java -jar target/AutomataViz-1.2.0-jar-with-dependencies.jar
 ```
 
 ## Try an expression

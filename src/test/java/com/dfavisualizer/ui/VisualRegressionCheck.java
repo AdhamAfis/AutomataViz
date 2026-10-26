@@ -17,7 +17,7 @@ import com.dfavisualizer.ui.components.VisualizationPanel;
 import com.mxgraph.swing.mxGraphComponent;
 import com.mxgraph.util.mxConstants;
 
-/** Run after mvn package with java -ea -cp target/test-classes:target/AutomataViz-1.1.0-jar-with-dependencies.jar com.dfavisualizer.ui.VisualRegressionCheck. */
+/** Run after mvn package with java -ea -cp target/test-classes:target/AutomataViz-1.2.0-jar-with-dependencies.jar com.dfavisualizer.ui.VisualRegressionCheck. */
 public class VisualRegressionCheck {
     public static void main(String[] args) throws Exception {
         UiTheme.install();
