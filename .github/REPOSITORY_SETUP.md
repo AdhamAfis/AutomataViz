@@ -21,4 +21,4 @@ Do not add a check that has not run yet. Do not restore path filters to the requ
 
 Weekly Maven and Actions dependency-update configuration is in `dependabot.yml`. Issue forms, the PR template, CODEOWNERS, CONTRIBUTING.md, and SECURITY.md take effect after they are committed and pushed.
 
-No license has been selected here. The maintainer must choose one before advertising the repository as licensed open-source software.
+The project is licensed under the [MIT License](../LICENSE).
