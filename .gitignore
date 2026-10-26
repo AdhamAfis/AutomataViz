@@ -57,3 +57,10 @@ Desktop.ini
 /.nb-gradle/
 build/
 .playwright-mcp/
+
+# Generated release packages and Python bytecode
+/release/
+__pycache__/
+
+# Local design-review reports
+/.impeccable/

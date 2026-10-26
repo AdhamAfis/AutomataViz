@@ -2,7 +2,11 @@
 
 ## Getting started
 
-1. Enter a regex in the input field and click "Visualize DFA" or press Enter
+Choose **Examples** below the expression for suffix recognition, parity, optional versus repeated symbols, factoring, star scope, overlapping patterns, binary multiples of three, and identifiers. Advanced examples include equivalent forms and counterexamples for similar-looking expressions. Each example includes a learning goal and accepted/rejected inputs; **Load example** fills the expression and test input and generates its graphs. Empty strings are explicitly labeled.
+
+The first-use hint shows the basic workflow. **Dismiss** remembers your choice; **Help → Getting started** brings it back.
+
+1. Enter a regex in the input field and click "Visualize DFA" or press Enter. Conversion and layout run in the background; Cancel generation stops the request and keeps the previous graph. Press Enter with a replacement expression to supersede the pending request. Errors also leave the previous graph intact. Syntax help below the expression explains the supported language.
 2. Navigate the visualization:
    - Zoom: Ctrl+Mouse Wheel or +/- buttons
    - Pan: Click "Pan" and drag, or right-click/Alt+drag; mouse wheel pans vertically (Shift for horizontally)
@@ -23,6 +27,10 @@
    - Follow the input ribbon and explanation to see what was consumed and why the string is accepted or rejected
 
 4. Learn the expression and conversion:
+   - Start with **Learn → Guided exercise: recognize a suffix**. Predict whether each input matches `(a|b)*abb`, check the explanation, then trace the input in the NFA.
+   - Each conversion stage has **Construction steps…**, with Back/Next through recorded algorithm decisions. Thompson snapshots show individual fragments being combined; state names are local to each fragment and can change after combination.
+   - Subset construction adds transitions as sets are discovered. The explanation shows the symbol move, ε-closure, and whether a subset is new or reused.
+   - Minimization shows the original DFA alongside successive partitions and the symbol responsible for each split, followed by the merged DFA. Snapshot graphs are read-only; use the main lesson graphs for editing experiments.
    - Select a fragment in "Explore expression" to highlight its source and read its meaning in the results area
    - Use "Explain selected part" to reread the explanation; choosing a part pauses active playback
    - Open "Learn" → "Step-by-Step conversion" → "Epsilon-NFA", enter a string, and choose "Start / Reset"
@@ -61,3 +69,9 @@ Compact transition labels such as `[0–9, a–z]` consume one character. Double
 - `(a|b)*abb` - Any string of 'a's and 'b's ending with 'abb'
 - `[a-z]+@[a-z]+\.(com|org|net)` - Simple email pattern
 
+
+## Teaching limits
+
+The app matches whole strings using its educational regex syntax. Wildcards and negated classes cover printable ASCII, not all Unicode characters. Use `[0-9]` instead of `\d`; anchors, counted repetitions, lookarounds and special groups are unsupported.
+
+Generation accepts at most 2,000 expression characters, 64 nested groups and 4,096 discovered DFA subsets. Each stage records at most 200 construction snapshots and a combined 30,000 states/transition entries. A visible notice identifies partial histories; the completed lesson graph is still available. Smaller expressions make better construction lessons.

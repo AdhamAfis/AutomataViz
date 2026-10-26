@@ -29,6 +29,7 @@ public class StepByStepDialog {
     private MainFrame mainFrame;
     private String regex;
     private String initialInput;
+    private boolean exercise;
     private javax.swing.SwingWorker<Void, String> worker;
 
     public StepByStepDialog(MainFrame mainFrame, String regex) {
@@ -36,6 +37,11 @@ public class StepByStepDialog {
     }
 
     public StepByStepDialog(MainFrame mainFrame, String regex, String initialInput) {
+        this(mainFrame, regex, initialInput, false);
+    }
+
+    public StepByStepDialog(MainFrame mainFrame, String regex, String initialInput, boolean exercise) {
+        this.exercise = exercise;
         this.initialInput = initialInput;
         this.mainFrame = mainFrame;
         this.regex = regex;
@@ -76,6 +82,14 @@ public class StepByStepDialog {
         expressionScroll.setPreferredSize(new java.awt.Dimension(100, 70));
         content.add(expressionScroll, BorderLayout.NORTH);
         content.add(new javax.swing.JScrollPane(instructions), BorderLayout.CENTER);
+        if (exercise) {
+            com.dfavisualizer.ui.components.GuidedExercisePanel activity = new com.dfavisualizer.ui.components.GuidedExercisePanel(input -> {
+                JPanel stage = (JPanel) tabbedPane.getComponentAt(1);
+                NfaLessonPanel lesson = (NfaLessonPanel) ((BorderLayout) stage.getLayout()).getLayoutComponent(BorderLayout.CENTER);
+                lesson.start(input); tabbedPane.setSelectedIndex(1);
+            });
+            content.add(activity, BorderLayout.SOUTH);
+        }
         introduction.add(content, BorderLayout.CENTER);
         tabbedPane.addTab("Introduction", introduction);
         for (String title : new String[] {"Epsilon-NFA", "NFA to DFA", "DFA Minimization"}) {
@@ -108,7 +122,7 @@ public class StepByStepDialog {
         restore.setVisible(false);
         restore.addActionListener(e -> {
             mainFrame.setExpressionSource(regex);
-            mainFrame.getVisualizationController().visualizeDfa(regex, mainFrame.getGraphControls().isDfaMinimized(),
+            mainFrame.getVisualizationController().requestVisualization(regex, mainFrame.getGraphControls().isDfaMinimized(),
                     false, mainFrame.getGraphControls().isHighlightDead(), mainFrame.getGraphControls().getCompareToggle().isSelected());
             dialog.dispose();
             javax.swing.SwingUtilities.invokeLater(() -> new StepByStepDialog(mainFrame, regex, initialInput).display());
@@ -149,17 +163,20 @@ public class StepByStepDialog {
         com.dfavisualizer.ui.DfaVisualizer visualizer = new com.dfavisualizer.ui.DfaVisualizer();
         visualizer.setHighlightDeadStates(mainFrame.getDfaVisualizer().isHighlightDeadStates());
         worker = new javax.swing.SwingWorker<Void, String>() {
+            private final com.dfavisualizer.algorithm.ConstructionTrace thompson = new com.dfavisualizer.algorithm.ConstructionTrace();
+            private final com.dfavisualizer.algorithm.ConstructionTrace subsets = new com.dfavisualizer.algorithm.ConstructionTrace();
+            private final com.dfavisualizer.algorithm.ConstructionTrace partitions = new com.dfavisualizer.algorithm.ConstructionTrace();
             private NFA epsilonNfa;
             private SubsetConstruction sc;
             private DFA nonMinimizedDfa, minimizedDfa;
-            private final DfaMinimizer minimizer = new DfaMinimizer();
+            private final DfaMinimizer minimizer = new DfaMinimizer(partitions);
             private AutomataGraph.Builder originalDrawing, nfaDrawing, minimizedDrawing;
 
             @Override protected Void doInBackground() {
                 publish("Parsing expression…");
-                epsilonNfa = new RegexParser().parse(regex);
+                epsilonNfa = new RegexParser(thompson).parse(regex);
                 publish("Building DFA state subsets…");
-                sc = new SubsetConstruction();
+                sc = new SubsetConstruction(subsets);
                 nonMinimizedDfa = sc.convertNfaToDfa(epsilonNfa);
                 publish("Minimizing DFA…");
                 minimizedDfa = minimizer.minimize(nonMinimizedDfa);
@@ -222,6 +239,10 @@ public class StepByStepDialog {
                                 : "This state remains separate; no other original state is equivalent.");
                     });
 
+                    addConstructionSteps(step2Panel, "Thompson construction", thompson);
+                    addConstructionSteps(step3Panel, "Subset construction", subsets);
+                    addConstructionSteps(step4Panel, "Partition refinement", partitions);
+                    enableExercise(introduction);
                     tabbedPane.setComponentAt(1, step2Panel);
                     tabbedPane.setComponentAt(2, step3Panel);
                     tabbedPane.setComponentAt(3, step4Panel);
@@ -280,6 +301,24 @@ public class StepByStepDialog {
         dialog.addWindowListener(new java.awt.event.WindowAdapter() {
             @Override public void windowClosed(java.awt.event.WindowEvent e) { worker.cancel(true); }
         });
+    }
+
+    private void enableExercise(java.awt.Container container) {
+        for (java.awt.Component component : container.getComponents()) {
+            if ("exercise.trace".equals(component.getName())) component.setEnabled(true);
+            if (component instanceof java.awt.Container) enableExercise((java.awt.Container) component);
+        }
+    }
+
+    private void addConstructionSteps(JPanel stage, String title, com.dfavisualizer.algorithm.ConstructionTrace trace) {
+        JPanel header = (JPanel) ((BorderLayout) stage.getLayout()).getLayoutComponent(BorderLayout.NORTH);
+        JPanel row = new JPanel(new BorderLayout(6, 4));
+        java.awt.Component detail = ((BorderLayout) header.getLayout()).getLayoutComponent(BorderLayout.SOUTH);
+        header.remove(detail); row.add(detail, BorderLayout.CENTER);
+        JButton steps = new JButton("Construction steps…");
+        steps.setToolTipText("Replay actual " + title.toLowerCase() + " decisions");
+        steps.addActionListener(e -> new ConstructionStepsDialog(dialog, title, trace).setVisible(true));
+        row.add(steps, BorderLayout.EAST); header.add(row, BorderLayout.SOUTH);
     }
 
     private JPanel createStepPanel(String title, String description, String details) {

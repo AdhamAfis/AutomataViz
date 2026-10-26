@@ -15,6 +15,20 @@ import com.dfavisualizer.model.DFA;
  * Implements Hopcroft's algorithm for DFA minimization.
  */
 public class DfaMinimizer {
+    private final ConstructionTrace trace;
+    public DfaMinimizer() { this(null); }
+    public DfaMinimizer(ConstructionTrace trace) { this.trace = trace; }
+    private static String names(Set<DFA.State> states) {
+        java.util.List<String> names = new ArrayList<>();
+        for (DFA.State state : states) names.add(state.getName());
+        java.util.Collections.sort(names); return names.toString();
+    }
+    private void record(String reason, DFA dfa, List<Set<DFA.State>> partitions) {
+        if (trace == null) return;
+        StringBuilder text = new StringBuilder(reason).append("\nPartitions:\n");
+        for (Set<DFA.State> partition : partitions) text.append(names(partition)).append("\n");
+        trace.dfa(text.toString(), dfa);
+    }
     private final Map<DFA.State, Set<DFA.State>> stateGroups = new HashMap<>();
 
     /** Exact original-state membership of each result state from the most recent conversion. */
@@ -32,6 +46,7 @@ public class DfaMinimizer {
         for (DFA.State state : dfa.getStates()) stateGroups.put(state, java.util.Collections.singleton(state));
 
         if (dfa.getStates().size() <= 1) {
+            if (trace != null) trace.dfa("No refinement needed: this automaton has at most one state or no alphabet.", dfa);
             return copyDfa(dfa);
         }
         
@@ -39,6 +54,7 @@ public class DfaMinimizer {
         Set<Character> alphabet = dfa.getAlphabet();
         
         if (alphabet.isEmpty()) {
+            if (trace != null) trace.dfa("No refinement needed: this automaton has at most one state or no alphabet.", dfa);
             return copyDfa(dfa);
         }
         
@@ -58,23 +74,20 @@ public class DfaMinimizer {
             partitions.add(new HashSet<>(nonAcceptStates));
         }
         
+        record("Initially separate accepting from non-accepting states: the empty suffix already distinguishes these groups.", dfa, partitions);
         Queue<Set<DFA.State>> queue = new LinkedList<>(partitions);
         
         while (!queue.isEmpty()) {
             if (Thread.currentThread().isInterrupted()) throw new java.util.concurrent.CancellationException();
             Set<DFA.State> setA = queue.poll();
             
-            for (char symbol : alphabet) {
+            for (char symbol : new java.util.TreeSet<>(alphabet)) {
                 Set<DFA.State> leadingToA = getStatesThatLeadTo(dfa, setA, symbol);
                 
                 List<Set<DFA.State>> newPartitions = new ArrayList<>();
+                List<Set<DFA.State>> shownPartitions = new ArrayList<>(partitions);
                 
                 for (Set<DFA.State> partition : partitions) {
-                    if (partition.equals(setA)) {
-                        newPartitions.add(partition);
-                        continue;
-                    }
-                    
                     Set<DFA.State> intersection = new HashSet<>(partition);
                     intersection.retainAll(leadingToA);
                     
@@ -84,7 +97,12 @@ public class DfaMinimizer {
                     if (!intersection.isEmpty() && !difference.isEmpty()) {
                         newPartitions.add(intersection);
                         newPartitions.add(difference);
-                        
+                        shownPartitions = splitPartitions(shownPartitions, partition, intersection, difference);
+                        record("Split " + names(partition) + " on '" + symbol + "': states in " + names(intersection)
+                            + " lead into " + names(setA) + "; states in " + names(difference)
+                            + " do not. They cannot remain equivalent.", dfa,
+                            shownPartitions);
+
                         if (queue.contains(partition)) {
                             queue.remove(partition);
                             queue.add(intersection);
@@ -105,7 +123,10 @@ public class DfaMinimizer {
             }
         }
         
-        return createMinimizedDfa(dfa, partitions);
+        record("Refinement finished. Each remaining group becomes one state; its members accept exactly the same suffixes.", dfa, partitions);
+        DFA result = createMinimizedDfa(dfa, partitions);
+        if (trace != null) trace.dfa("Merge each final group into one state. This is the minimized DFA.", result);
+        return result;
     }
     
     /**
@@ -114,12 +135,22 @@ public class DfaMinimizer {
      */
     private DFA minimizeWithSingleInitialPartition(DFA dfa, Set<DFA.State> allStates, Set<Character> alphabet) {
         List<Set<DFA.State>> partitions = new ArrayList<>();
+        boolean complete = allStates.stream().allMatch(state -> alphabet.stream().allMatch(
+            symbol -> dfa.getTransitionTarget(state, symbol) != null));
+        if (complete) {
+            partitions.add(new HashSet<>(allStates));
+            record("All states share acceptance status and every transition exists. Every suffix has the same result, so all states merge.", dfa, partitions);
+            DFA result = createMinimizedDfa(dfa, partitions);
+            if (trace != null) trace.dfa("Completed minimized DFA: one equivalence class.", result);
+            return result;
+        }
         for (DFA.State state : allStates) {
             Set<DFA.State> partition = new HashSet<>();
             partition.add(state);
             partitions.add(partition);
         }
         
+        record("All states share acceptance status. Start with separate groups and merge groups with equivalent transitions.", dfa, partitions);
         boolean changed;
         do {
             changed = false;
@@ -130,6 +161,7 @@ public class DfaMinimizer {
                     if (areEquivalentPartitions(dfa, partitions.get(i), partitions.get(j), partitions, alphabet)) {
                         partitions.get(i).addAll(partitions.get(j));
                         partitions.remove(j);
+                        record("Merge groups with the same acceptance and transition groups on every symbol.", dfa, partitions);
                         changed = true;
                         break;
                     }
@@ -138,9 +170,18 @@ public class DfaMinimizer {
             }
         } while (changed);
         
-        return createMinimizedDfa(dfa, partitions);
+        record("Final groups. Each group becomes one state.", dfa, partitions);
+        DFA result = createMinimizedDfa(dfa, partitions);
+        if (trace != null) trace.dfa("Completed minimized DFA.", result);
+        return result;
     }
-    
+
+    private static List<Set<DFA.State>> splitPartitions(List<Set<DFA.State>> partitions, Set<DFA.State> old,
+            Set<DFA.State> left, Set<DFA.State> right) {
+        List<Set<DFA.State>> result = new ArrayList<>(partitions);
+        result.remove(old); result.add(left); result.add(right); return result;
+    }
+
     private boolean areEquivalentPartitions(DFA dfa, Set<DFA.State> p1, Set<DFA.State> p2, 
                                            List<Set<DFA.State>> partitions, Set<Character> alphabet) {
         DFA.State s1 = p1.iterator().next();
@@ -152,7 +193,7 @@ public class DfaMinimizer {
             return false;
         }
         
-        for (char symbol : alphabet) {
+        for (char symbol : new java.util.TreeSet<>(alphabet)) {
             DFA.State target1 = dfa.getTransitionTarget(s1, symbol);
             DFA.State target2 = dfa.getTransitionTarget(s2, symbol);
             

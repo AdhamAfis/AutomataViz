@@ -27,7 +27,7 @@ public class UiInteractionCheck {
                 assert results.getDividerLocation() == original - 40 : "Results divider cannot move";
                 InputPanel input = findInput(frame.getContentPane());
                 input.getRegexField().setText("a(b|c)*");
-                input.getRegexField().postActionEvent();
+                input.getRegexField().postActionEvent(); GenerationCheck.await(app);
                 frame.validate();
                 assert app.getCurrentDfa() != null : "Enter in regex input does not visualize";
                 assert app.getDfaPanel().getVisualizationComponent() instanceof mxGraphComponent;
@@ -38,7 +38,7 @@ public class UiInteractionCheck {
                 assert app.getStatusPanel().isShowing() : "Results hidden after view change";
                 Object previousNfaGraph = app.getNfaPanel().getVisualizationComponent();
                 input.getRegexField().setText("ab");
-                input.getRegexField().postActionEvent();
+                input.getRegexField().postActionEvent(); GenerationCheck.await(app);
                 app.getGraphControls().getCompareToggle().doClick();
                 frame.validate();
                 mxGraphComponent nfa = (mxGraphComponent) app.getNfaPanel().getVisualizationComponent();

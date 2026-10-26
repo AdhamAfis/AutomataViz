@@ -14,6 +14,12 @@ import com.dfavisualizer.model.NFA;
  * Implements the subset construction algorithm to convert an NFA to a DFA.
  */
 public class SubsetConstruction {
+    private final ConstructionTrace trace;
+    public SubsetConstruction() { this(null); }
+    public SubsetConstruction(ConstructionTrace trace) { this.trace = trace; }
+    private void record(String text, DFA dfa) {
+        if (trace != null) trace.dfa(text + "\nSets list NFA state IDs: for example, 3 means q3 in the NFA graph.", dfa);
+    }
     private final Map<DFA.State, Set<Integer>> stateSubsets = new java.util.LinkedHashMap<>();
 
     public Map<DFA.State, Set<Integer>> getStateSubsets() {
@@ -49,6 +55,8 @@ public class SubsetConstruction {
                 }
             }
             
+            record("Start q0 = ε-closure({" + nfa.getStartState() + "}) = " + new java.util.TreeSet<>(eClosureStart)
+                + ". There are no character transitions. Accepting exactly when this set contains an NFA accepting state.", dfa);
             return dfa;
         }
         
@@ -77,6 +85,8 @@ public class SubsetConstruction {
             }
         }
         
+        record("Start q0 = ε-closure({" + nfa.getStartState() + "}) = " + new java.util.TreeSet<>(startStateEClosure)
+            + ". Accepting: " + isStartAccepting + ". Each DFA state represents a set of active NFA states.", dfa);
         int stateCounter = 1;
         
         while (!queue.isEmpty()) {
@@ -89,13 +99,18 @@ public class SubsetConstruction {
                 Set<Integer> nextStateSet = nfa.epsilonClosure(moveResult);
                 
                 if (nextStateSet.isEmpty()) {
+                    record(currentDfaState + " on '" + symbol + "': move = " + new java.util.TreeSet<>(moveResult)
+                        + "; ε-closure = {}. This missing transition will lead to the dead state during completion.", dfa);
                     continue;
                 }
                 
+                boolean discovered = !dfaStates.containsKey(nextStateSet);
                 DFA.State nextDfaState;
                 if (dfaStates.containsKey(nextStateSet)) {
                     nextDfaState = dfaStates.get(nextStateSet);
                 } else {
+                    if (stateCounter >= 4096) throw new IllegalArgumentException(
+                        "Expression exceeds 4,096 DFA subsets. Try a smaller example or fewer repeated alternatives.");
                     nextDfaState = new DFA.State("q" + stateCounter++);
                     dfa.addState(nextDfaState);
                     dfaStates.put(nextStateSet, nextDfaState);
@@ -111,10 +126,17 @@ public class SubsetConstruction {
                 }
                 
                 dfa.addTransition(currentDfaState, symbol, nextDfaState);
+                record(currentDfaState + " on '" + symbol + "': move(" + new java.util.TreeSet<>(currentStateSet) + ") = "
+                    + new java.util.TreeSet<>(moveResult) + "; ε-closure = " + new java.util.TreeSet<>(nextStateSet)
+                    + ". " + (discovered ? "Discover " : "Reuse ") + nextDfaState + ". Accepting: "
+                    + dfa.getAcceptStates().contains(nextDfaState) + ".", dfa);
             }
         }
         
+        // Include unused NFA symbols so an empty-language branch still has a complete transition function.
+        for (char symbol : nfa.getAlphabet()) dfa.addSymbol(symbol);
         ensureCompleteTransitionFunction(dfa);
+        record("Construction complete. Missing moves go to qDead = {}, which loops on the alphabet and cannot accept.", dfa);
         
         return dfa;
     }

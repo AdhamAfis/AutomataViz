@@ -12,7 +12,7 @@ A desktop learning tool for regular expressions and finite automata. Build a gra
 
 - **Visualize expressions** as interactive NFA and DFA graphs, with side-by-side comparison.
 - **Animate a test string** with pause, speed controls, backward/forward stepping, and explanations of acceptance or rejection.
-- **Learn the conversion** through ε-NFA simulation, subset construction, and DFA minimization.
+- **Learn the conversion** through construction snapshots, ε-NFA simulation, subset discovery, and partition refinement.
 - **Edit transitions** by reconnecting endpoints; the expression updates to match the edited graph.
 - **Compare regex alternatives**: shortest found and easiest to read, each checked for exact language equivalence.
 - Pan, zoom, export PNGs, and choose light or dark FlatLaf themes.
@@ -30,7 +30,7 @@ java -jar target/AutomataViz-1.1.0-jar-with-dependencies.jar
 
 ## Try an expression
 
-Enter `(a|b)*abb`, click **Visualize DFA**, then test `aabb`. Choose **Animate** to follow each character and transition, or **Learn → Step-by-Step conversion** to inspect the construction.
+Enter `(a|b)*abb`, click **Visualize DFA**, then test `aabb`. Choose **Animate** to follow each character and transition, or **Learn → Guided exercise: recognize a suffix** to predict results and check your reasoning. **Learn → Step-by-Step conversion** includes construction snapshots with Back/Next.
 
 Supported syntax includes `|`, `*`, `+`, `?`, groups, character classes, and `.`. See the [user guide](docs/USAGE.md) for examples, editing controls, and syntax limitations. Generated alternatives preserve the language; “shortest found” does not guarantee the globally shortest regex.
 

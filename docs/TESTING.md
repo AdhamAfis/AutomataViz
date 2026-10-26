@@ -7,6 +7,11 @@ See [Contributing](../CONTRIBUTING.md) for the checks required before a pull req
 After `mvn package`, run these assertion-based Swing checks on a machine with a desktop session:
 
 ```sh
+java -ea -Djava.awt.headless=true -cp 'target/test-classes:target/*' com.dfavisualizer.algorithm.LearningExamplesCheck
+java -ea -cp 'target/test-classes:target/*' com.dfavisualizer.ui.LearningExamplesUiCheck
+java -ea -cp 'target/test-classes:target/*' com.dfavisualizer.ui.GenerationCheck
+java -ea -cp 'target/test-classes:target/*' com.dfavisualizer.ui.ConstructionLessonCheck
+java -ea -Djava.awt.headless=true -cp 'target/test-classes:target/*' com.dfavisualizer.algorithm.ConstructionTraceCheck
 java -ea -cp target/test-classes:target/AutomataViz-1.1.0-jar-with-dependencies.jar com.dfavisualizer.ui.VisualRegressionCheck
 java -ea -cp target/test-classes:target/AutomataViz-1.1.0-jar-with-dependencies.jar com.dfavisualizer.ui.UiInteractionCheck
 java -ea -cp target/test-classes:target/AutomataViz-1.1.0-jar-with-dependencies.jar com.dfavisualizer.ui.GraphNavigationCheck
@@ -44,3 +49,5 @@ java -ea -Djava.awt.headless=true -cp target/test-classes:target/AutomataViz-1.1
 
 It checks thumb contrast in both orientations, including hover and pressed states, at 1× and 2× scale.
 
+
+`GenerationCheck` verifies event-loop responsiveness, atomic installation, failed-request preservation, cancellation and latest-request ordering. `ConstructionLessonCheck` checks guided predictions, simulation handoff, read-only construction graphs, Back/Next and graph visibility. `ConstructionTraceCheck` runs headlessly and checks snapshot independence, construction decisions, language preservation, dead-state completion and resource limits.

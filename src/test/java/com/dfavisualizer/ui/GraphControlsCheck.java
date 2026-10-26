@@ -18,7 +18,7 @@ public class GraphControlsCheck {
                 InputPanel input = findInput(app.getFrame().getContentPane());
                 assert !hasCheckbox(input) : "Input area still has graph preferences";
                 GraphControlsPanel controls = app.getGraphControls();
-                input.getRegexField().setText("(a|b)*abb"); input.getRegexField().postActionEvent();
+                input.getRegexField().setText("(a|b)*abb"); input.getRegexField().postActionEvent(); GenerationCheck.await(app);
                 NFA nfa = app.getCurrentNfa();
                 assert nfa.getTransitions().keySet().stream().anyMatch(t -> t.getSymbol() == NFA.EPSILON) : "Teaching NFA lost epsilon structure";
                 Object nfaGraph = app.getNfaPanel().getVisualizationComponent();
@@ -42,7 +42,7 @@ public class GraphControlsCheck {
                 assert !app.getVisualizationController().getAnimationController().isAnimationRunning() : "View replacement kept stale animation";
                 assert app.getDfaVisualizer().isGridSnap() : "Refresh lost snap preference";
                 app.getConverter().setUseOptimizedImplementation(false);
-                input.getRegexField().setText("ab"); input.getRegexField().postActionEvent();
+                input.getRegexField().setText("ab"); input.getRegexField().postActionEvent(); GenerationCheck.await(app);
                 assert controls.getCompareToggle().isSelected() && controls.getGridSnapItem().isSelected();
                 assert ((AutomataGraph) app.getDfaPanel().getVisualizationComponent()).isGridVisible();
                 assert !app.getCurrentDfa().getDeadStates().isEmpty();

@@ -80,7 +80,11 @@ public class MainFrame {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.addWindowListener(new WindowAdapter() {
             @Override public void windowClosed(WindowEvent e) {
-                if (visualizationController != null) visualizationController.getAnimationController().stopAnimation();
+                if (visualizationController != null) {
+                    visualizationController.cancelGeneration();
+                    visualizationController.getAnimationController().stopAnimation();
+                }
+                cancelExpressionUpdate();
             }
         });
         frame.setSize(1200, 820);
@@ -267,6 +271,7 @@ public class MainFrame {
 
     public void synchronizeEditedGraph(AutomataGraph edited, java.util.function.Consumer<String> updated,
             java.util.function.Consumer<String> failed) {
+        visualizationController.cancelGeneration();
         cancelExpressionUpdate();
         visualizationController.getAnimationController().stopAnimation();
         if (edited.getDfaModel() != null) {
@@ -347,11 +352,14 @@ public class MainFrame {
     }
 
     public void applyTheme(UiTheme.Theme theme) {
+        visualizationController.cancelGeneration();
         if (visualizationController.getAnimationController().isAnimationRunning())
             visualizationController.getAnimationController().togglePause();
         UiTheme.apply(theme);
         visualizationController.getAnimationController().refreshTheme();
     }
+
+    public InputPanel getInputPanel() { return inputPanel; }
 
     public GraphControlsPanel getGraphControls() { return graphControls; }
 
