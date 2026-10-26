@@ -30,10 +30,14 @@ jobs:
           package-manager-cache: false
       - name: Build the desktop download
         run: mvn --batch-mode --no-transfer-progress clean package
+      - name: Check release packaging helpers
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
       - name: Check the downloadable app's core algorithms
         run: |
           java -ea -Djava.awt.headless=true -cp "target/test-classes:target/*" com.dfavisualizer.algorithm.LearningRegexCheck
           java -ea -Djava.awt.headless=true -cp "target/test-classes:target/*" com.dfavisualizer.algorithm.RegexAlternativesCheck
+          java -ea -Djava.awt.headless=true -cp "target/test-classes:target/*" com.dfavisualizer.algorithm.ConstructionTraceCheck
+          java -ea -Djava.awt.headless=true -cp "target/test-classes:target/*" com.dfavisualizer.algorithm.LearningExamplesCheck
       - name: Build and verify the website
         working-directory: website
         run: npm run verify

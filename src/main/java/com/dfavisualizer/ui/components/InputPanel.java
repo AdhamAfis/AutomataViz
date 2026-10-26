@@ -32,6 +32,7 @@ public class InputPanel extends JPanel {
     private JButton visualizeButton;
     private JButton testButton;
     private JButton animateButton;
+    private GettingStartedPanel gettingStarted;
     
     public InputPanel(MainFrame mainFrame) {
         this.mainFrame = mainFrame;
@@ -53,7 +54,7 @@ public class InputPanel extends JPanel {
         regexField = new JTextField();
         regexField.putClientProperty("JTextField.placeholderText", "Try (a|b)*abb");
         regexField.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 15));
-        regexField.setToolTipText("For example: a(b|c)* or (a|b)*abb. Press Enter to visualize.");
+        regexField.setToolTipText("Educational regex syntax; matches the whole input. Use Syntax help for limits.");
         regexField.addActionListener(this::visualizeDfa);
         regexLabel.setLabelFor(regexField);
         visualizeButton = new JButton("Visualize DFA");
@@ -63,7 +64,27 @@ public class InputPanel extends JPanel {
         regexPanel.add(regexField, BorderLayout.CENTER);
         regexPanel.add(visualizeButton, BorderLayout.EAST);
         inputs.add(regexPanel, BorderLayout.NORTH);
+        JPanel help = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 0));
+        JLabel hint = new JLabel("Whole-string matching · literals, |, *, +, ?, groups, [a-z], .");
+        hint.setForeground(UiTheme.MUTED);
+        JButton syntax = new JButton("Syntax help");
+        syntax.addActionListener(e -> JOptionPane.showMessageDialog(mainFrame.getFrame(),
+            "Supported: literals, |, *, +, ?, ordinary parentheses, [a-z], [^a], . and escaped punctuation.\n"
+            + "Examples: a(b|c)*, (a|b)*abb, [0-9]+. Use () for the empty string.\n"
+            + "The entire input must match. Wildcards and negated classes cover printable ASCII (space through ~).\n"
+            + "No shorthand classes (such as \\d), anchors, counted repetitions, lookarounds or special groups.\n"
+            + "Use [0-9] instead of \\d, and aa instead of a{2}.\n"
+            + "Generation is limited to 2,000 expression characters, 64 nested groups and 4,096 DFA subsets.\n"
+            + "Construction history is capped at 200 steps / 30,000 stored states and transitions per stage.",
+            "Educational regex syntax", JOptionPane.INFORMATION_MESSAGE));
+        JButton examples = new JButton("Examples");
+        examples.addActionListener(e -> new com.dfavisualizer.ui.dialogs.ExamplesDialog(mainFrame).setVisible(true));
+        UiTheme.quietButton(examples);
+        UiTheme.quietButton(syntax); help.add(hint); help.add(syntax); help.add(examples);
+        inputs.add(help, BorderLayout.SOUTH);
 
+        gettingStarted = new GettingStartedPanel(java.util.prefs.Preferences.userNodeForPackage(UiTheme.class));
+        add(gettingStarted, BorderLayout.NORTH);
         add(inputs, BorderLayout.CENTER);
 
         JPanel testPanel = new JPanel(new BorderLayout(10, 0));
@@ -98,6 +119,12 @@ public class InputPanel extends JPanel {
         JMenuItem walkthrough = new JMenuItem("Step-by-Step conversion");
         walkthrough.addActionListener(e -> showStepByStepConversion());
         learn.add(walkthrough);
+        JMenuItem exercise = new JMenuItem("Guided exercise: recognize a suffix");
+        exercise.addActionListener(e -> {
+            regexField.setText("(a|b)*abb"); testStringField.setText("aabb");
+            new StepByStepDialog(mainFrame, "(a|b)*abb", "aabb", true).display();
+        });
+        learn.add(exercise);
         JMenu tools = new JMenu("Tools");
         tools.setMnemonic('T');
         JMenuItem debug = new JMenuItem("Debug expression");
@@ -108,6 +135,9 @@ public class InputPanel extends JPanel {
         JMenuItem theory = new JMenuItem("Automata theory");
         theory.addActionListener(e -> showTheoryPopup());
         help.add(theory);
+        JMenuItem gettingStartedItem = new JMenuItem("Getting started");
+        gettingStartedItem.addActionListener(e -> gettingStarted.showAgain());
+        help.add(gettingStartedItem);
         JMenu view = new JMenu("View");
         view.setMnemonic('V');
         JMenuItem themes = new JMenuItem("Themes…");
@@ -118,9 +148,12 @@ public class InputPanel extends JPanel {
     }
 
     private void visualizeDfa(ActionEvent e) {
-        String regex = regexField.getText().trim();
+        if (e.getSource() == visualizeButton && mainFrame.getVisualizationController().isGenerating()) {
+            mainFrame.getVisualizationController().cancelGeneration(); return;
+        }
+        String regex = regexField.getText();
         GraphControlsPanel controls = mainFrame.getGraphControls();
-        mainFrame.getVisualizationController().visualizeDfa(regex, controls.isDfaMinimized(), false,
+        mainFrame.getVisualizationController().requestVisualization(regex, controls.isDfaMinimized(), false,
                 controls.isHighlightDead(), controls.getCompareToggle().isSelected());
     }
     
@@ -165,6 +198,12 @@ public class InputPanel extends JPanel {
     }
     
     
+    public void setGenerating(boolean busy) {
+        visualizeButton.setText(busy ? "Cancel generation" : "Visualize DFA");
+        testButton.setEnabled(!busy); animateButton.setEnabled(!busy);
+        putClientProperty("generation.busy", busy);
+    }
+
     public JTextField getRegexField() {
         return regexField;
     }

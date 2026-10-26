@@ -9,15 +9,14 @@ test('gallery keeps selection, image, caption and full-size links synchronized',
     setAttribute(key, value) { this.attrs[key] = value; },
     addEventListener(event, callback) { this.listeners[event] = callback; }
   });
-  const buttons = ['workspace', 'learning', 'alternatives', 'playback', 'rejection'].map(view => element({ view }));
-  const link = element({ show: 'learning' });
+  const buttons = ['workspace', 'learning', 'alternatives', 'playback'].map(view => element({ view }));
   const nodes = Object.fromEntries([
     '#copy-command', '#gallery-image', '#gallery-full', '.full-size',
     '#gallery-caption', '.gallery-choices'
   ].map(key => [key, element()]));
   const document = {
     querySelector: selector => nodes[selector],
-    querySelectorAll: selector => selector === '[data-view]' ? buttons : [link]
+    querySelectorAll: selector => selector === '[data-view]' ? buttons : []
   };
   runInNewContext(readFileSync(`${__dirname}/../dist/site.js`, 'utf8'), { document });
   assert.equal(nodes['.gallery-choices'].hidden, false);
@@ -31,7 +30,7 @@ test('gallery keeps selection, image, caption and full-size links synchronized',
     assert.ok(nodes['#gallery-caption'].textContent.length > 20);
     assert.ok(nodes['#gallery-image'].width > 0 && nodes['#gallery-image'].height > 0);
   }
-  link.listeners.click();
+  buttons[1].listeners.click();
   assert.equal(buttons[1].attrs['aria-pressed'], 'true');
   assert.equal(nodes['#gallery-image'].src, 'assets/learning-mac.png');
 });

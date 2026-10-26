@@ -3,7 +3,6 @@ package com.dfavisualizer.controller;
 import java.util.Map;
 import java.util.Set;
 
-import javax.swing.JComponent;
 import javax.swing.JOptionPane;
 
 import com.dfavisualizer.algorithm.DfaMinimizer;
@@ -23,83 +22,103 @@ public class VisualizationController {
         this.animationController = new AnimationController(mainFrame);
     }
     
-    /**
-     * Visualize a DFA from a regex
-     * 
-     * @param regex The regular expression to convert
-     * @param minimizeDfa Whether to minimize the DFA
-     * @param minimizeNfa Whether to minimize the NFA
-     * @param showDeadStates Whether to highlight dead states
-     * @param showSplitView Whether to show both NFA and DFA
-     * @return True if visualization was successful
-     */
-    public boolean visualizeDfa(String regex, boolean minimizeDfa, boolean minimizeNfa, boolean showDeadStates, boolean showSplitView) {
-        mainFrame.cancelExpressionUpdate();
-        if (regex.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(mainFrame.getFrame(), "Please enter a regular expression.", 
-                    "Empty Input", JOptionPane.WARNING_MESSAGE);
-            return false;
+    private javax.swing.SwingWorker<Prepared, String> generation;
+
+    public boolean isGenerating() { return generation != null; }
+
+    public void cancelGeneration() {
+        if (generation == null) return;
+        generation.cancel(true); generation = null;
+        mainFrame.getInputPanel().setGenerating(false);
+        mainFrame.getStatusPanel().setStatus("Generation cancelled. The previous graph is unchanged.");
+    }
+
+    public void requestVisualization(String regex, boolean minimized, boolean minimizeNfa, boolean dead, boolean split) {
+        cancelGeneration();
+        if (regex == null || regex.trim().isEmpty()) {
+            mainFrame.getStatusPanel().setStatus("Enter an expression, for example (a|b)*abb. Use () for the empty string.");
+            return;
         }
+        mainFrame.cancelExpressionUpdate();
+        animationController.stopAnimation();
+        mainFrame.getInputPanel().setGenerating(true);
+        mainFrame.getStatusPanel().setStatus("Preparing graphs… You can cancel or enter a replacement expression.");
+        generation = new javax.swing.SwingWorker<Prepared, String>() {
+            @Override protected Prepared doInBackground() {
+                return prepare(regex, minimized, minimizeNfa, dead, this::publish);
+            }
+            @Override protected void process(java.util.List<String> messages) {
+                if (this == generation) mainFrame.getStatusPanel().setStatus(messages.get(messages.size() - 1));
+            }
+            @Override protected void done() {
+                if (this != generation) return;
+                generation = null;
+                mainFrame.getInputPanel().setGenerating(false);
+                if (isCancelled() || !mainFrame.getFrame().isDisplayable()) return;
+                try { apply(get(), regex, minimized, dead, mainFrame.getGraphControls().getCompareToggle().isSelected(),
+                    mainFrame.getDfaVisualizer().isGridSnap()); }
+                catch (Exception ex) {
+                    Throwable cause = ex.getCause() == null ? ex : ex.getCause();
+                    mainFrame.getStatusPanel().setStatus("Could not generate: " + cause.getMessage()
+                        + "\nThe previous graph is unchanged. Use Syntax help for supported expressions.");
+                }
+            }
+        };
+        generation.execute();
+    }
 
+    private static final class Prepared {
+        DFA original, dfa;
+        NFA nfa, minimizedNfa;
+        com.dfavisualizer.ui.AutomataGraph.Builder nfaDrawing, dfaDrawing;
+    }
+
+    private Prepared prepare(String regex, boolean minimized, boolean minimizeNfa, boolean dead,
+            java.util.function.Consumer<String> progress) {
+        Prepared result = new Prepared();
+        progress.accept("Parsing expression…");
+        result.nfa = new RegexParser().parse(regex);
+        progress.accept("Discovering DFA subsets…");
+        result.original = new SubsetConstruction().convertNfaToDfa(result.nfa);
+        progress.accept("Minimizing states…");
+        result.dfa = minimized ? new DfaMinimizer().minimize(result.original) : result.original;
+        result.minimizedNfa = minimizeNfa ? new NfaMinimizer().minimizeNfa(result.nfa) : null;
+        progress.accept("Laying out graphs…");
+        com.dfavisualizer.ui.DfaVisualizer dfaView = new com.dfavisualizer.ui.DfaVisualizer();
+        dfaView.setHighlightDeadStates(dead);
+        result.dfaDrawing = dfaView.prepareDfa(result.dfa);
+        result.nfaDrawing = new com.dfavisualizer.ui.NfaVisualizer().prepareNfa(
+            result.minimizedNfa == null ? result.nfa : result.minimizedNfa);
+        return result;
+    }
+
+    private void apply(Prepared result, String regex, boolean minimized, boolean dead, boolean split, boolean snap) {
+        com.dfavisualizer.ui.AutomataGraph nfaView = new com.dfavisualizer.ui.AutomataGraph(result.nfaDrawing, snap);
+        com.dfavisualizer.ui.AutomataGraph dfaView = new com.dfavisualizer.ui.AutomataGraph(result.dfaDrawing, snap);
+        mainFrame.setCurrentNfa(result.nfa); mainFrame.setMinimizedNfa(result.minimizedNfa);
+        mainFrame.setNonMinimizedDfa(result.original); mainFrame.setCurrentDfa(result.dfa);
+        mainFrame.getDfaVisualizer().setHighlightDeadStates(dead);
+        mainFrame.getNfaPanel().setVisualizationComponent(nfaView);
+        mainFrame.getDfaPanel().setVisualizationComponent(dfaView);
+        mainFrame.updateVisualizationLayout(split);
+        mainFrame.getGraphControls().showDfaVariant(minimized, true);
+        mainFrame.showExpression(regex);
+        mainFrame.getStatusPanel().setStatus("Ready: " + countDfaStats(result.dfa));
+    }
+
+    /** Synchronous entry point for programmatic use; UI actions use requestVisualization. */
+    public boolean visualizeDfa(String regex, boolean minimized, boolean minimizeNfa, boolean dead, boolean split) {
+        cancelGeneration(); mainFrame.cancelExpressionUpdate(); animationController.stopAnimation();
         try {
-            animationController.stopAnimation();
-            mainFrame.getStatusPanel().setStatus("Converting regex to DFA...");
-            
-            mainFrame.getDfaVisualizer().setHighlightDeadStates(showDeadStates);
-            
-            DFA nonMinimizedDfa = mainFrame.getConverter().convertRegexToDfaWithoutMinimization(regex);
-            mainFrame.setNonMinimizedDfa(nonMinimizedDfa);
-            
-            NFA currentNfa = mainFrame.getConverter().getLastNfa();
-            mainFrame.setCurrentNfa(currentNfa);
-            
-            if (minimizeNfa && currentNfa != null) {
-                NFA minimizedNfa = mainFrame.getNfaMinimizer().minimizeNfa(currentNfa);
-                mainFrame.setMinimizedNfa(minimizedNfa);
-                mainFrame.getStatusPanel().setStatus("NFA minimization successful. Original NFA: " + currentNfa.getStates().size() + 
-                           " states, Minimized NFA: " + minimizedNfa.getStates().size() + " states.");
-            } else {
-                mainFrame.setMinimizedNfa(null);
-            }
-            
-            if (minimizeDfa) {
-                DFA currentDfa = mainFrame.getDfaMinimizer().minimize(nonMinimizedDfa);
-                mainFrame.setCurrentDfa(currentDfa);
-                mainFrame.getStatusPanel().setStatus("Conversion and minimization successful: " + countDfaStats(currentDfa));
-            } else {
-                mainFrame.setCurrentDfa(nonMinimizedDfa);
-                mainFrame.getStatusPanel().setStatus("Conversion successful (no minimization): " + countDfaStats(nonMinimizedDfa));
-            }
-            
-            // Keep the hidden NFA current so reopening split view compares the same regex.
-            NFA nfaToDisplay = (minimizeNfa && mainFrame.getMinimizedNfa() != null) ? mainFrame.getMinimizedNfa() : mainFrame.getCurrentNfa();
-            
-            if (nfaToDisplay != null) {
-                JComponent nfaVisualization = mainFrame.getNfaVisualizer().visualizeNfa(nfaToDisplay);
-                
-                mainFrame.getNfaPanel().setVisualizationComponent(nfaVisualization);
-            }
-
-            DFA dfaToDisplay = mainFrame.getCurrentDfa();
-            if (dfaToDisplay != null) {
-                JComponent dfaVisualization = mainFrame.getDfaVisualizer().visualizeDfa(dfaToDisplay);
-                
-                mainFrame.getDfaPanel().setVisualizationComponent(dfaVisualization);
-            }
-            
-            mainFrame.updateVisualizationLayout(showSplitView);
-            mainFrame.getGraphControls().showDfaVariant(minimizeDfa, true);
-            mainFrame.showExpression(regex);
-            
+            apply(prepare(regex, minimized, minimizeNfa, dead, message -> { }), regex, minimized, dead, split,
+                mainFrame.getDfaVisualizer().isGridSnap());
             return true;
         } catch (Exception ex) {
-            mainFrame.getStatusPanel().setStatus("Error: " + ex.getMessage());
-            JOptionPane.showMessageDialog(mainFrame.getFrame(), "Error parsing regex: " + ex.getMessage(), 
-                    "Parsing Error", JOptionPane.ERROR_MESSAGE);
+            mainFrame.getStatusPanel().setStatus("Could not generate: " + ex.getMessage());
             return false;
         }
     }
-    
+
     public void debugRegex(String regex) {
         animationController.stopAnimation();
         if (regex.trim().isEmpty()) {
@@ -191,6 +210,7 @@ public class VisualizationController {
     }
     
     public boolean testString(String testString) {
+        if (isGenerating()) return false;
         animationController.stopAnimation();
         DFA currentDfa = mainFrame.getCurrentDfa();
         if (currentDfa == null) {
@@ -291,6 +311,7 @@ public class VisualizationController {
     }
     
     public void setDfaMinimized(boolean minimized) {
+        cancelGeneration();
         if (mainFrame.getNonMinimizedDfa() == null) return;
         mainFrame.setCurrentDfa(minimized ? mainFrame.getDfaMinimizer().minimize(mainFrame.getNonMinimizedDfa())
                 : mainFrame.getNonMinimizedDfa());
@@ -299,6 +320,7 @@ public class VisualizationController {
     }
 
     public void refreshDfaView() {
+        cancelGeneration();
         if (mainFrame.getCurrentDfa() == null) return;
         animationController.stopAnimation();
         mainFrame.getDfaPanel().setVisualizationComponent(mainFrame.getDfaVisualizer().visualizeDfa(mainFrame.getCurrentDfa()));

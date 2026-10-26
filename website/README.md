@@ -1,6 +1,6 @@
 # AutomataViz website
 
-Static HTML, CSS, and JavaScript, deployed from this repository with GitHub Pages. No frontend dependencies or installation step are needed. The tag-based desktop release workflow remains separate.
+Static HTML, CSS, and JavaScript, deployed from this repository with GitHub Pages. No frontend dependencies or installation step are needed. The desktop release workflow remains separate and creates tags automatically when a new release version reaches main.
 
 ## Local workflow
 
@@ -31,7 +31,7 @@ Verification runs the gallery test, validator tests, JavaScript syntax checking,
 
 All pull requests and branch pushes run the build and checks, including documentation-only changes so a required CI status never remains pending due to a path filter. They do not publish. Successful default-branch runs publish only `website/build`, using GitHub's Pages artifact/deploy actions and the `github-pages` environment. No personal token, external hosting account, or `gh-pages` branch is required. The deployment URL appears in the Actions run's environment link. The usual project URL is `https://adhamafis.github.io/AutomataViz/` unless a custom domain is configured.
 
-This is a development snapshot download built from the same commit as the website, not a stable release. Tagged desktop releases continue through `.github/workflows/release.yml`. Re-run an earlier successful Pages workflow to restore its source revision; this rebuilds its JAR rather than retrieving a permanently retained binary.
+This is a development snapshot download built from the same commit as the website, not a stable release. Stable and prerelease downloads are published by `.github/workflows/release.yml`; see [release instructions](../CONTRIBUTING.md#reviews-and-releases). Re-run an earlier successful Pages workflow to restore its source revision; this rebuilds its JAR rather than retrieving a permanently retained binary.
 
 ## Screenshots
 

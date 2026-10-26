@@ -32,11 +32,6 @@ const screenshotViews = {
     src: 'assets/playback-mac.png', width: 2624, height: 1864,
     alt: 'Input playback paused after four of five symbols in abaab, with q2 active and the next b transition visible',
     caption: 'Input playback: four symbols consumed, with the next transition highlighted.'
-  },
-  rejection: {
-    src: 'assets/rejection-mac.png', width: 2624, height: 1864,
-    alt: 'The completed abaab trace ends in non-accepting state q1, with an explanation of why the string is rejected',
-    caption: 'Rejection explained: all input was consumed, but the final state is not accepting.'
   }
 };
 function showScreenshot(key) {
@@ -58,7 +53,4 @@ function showScreenshot(key) {
 document.querySelector('.gallery-choices').hidden = false;
 for (const button of document.querySelectorAll('[data-view]')) {
   button.addEventListener('click', () => showScreenshot(button.dataset.view));
-}
-for (const link of document.querySelectorAll('[data-show]')) {
-  link.addEventListener('click', () => showScreenshot(link.dataset.show));
 }

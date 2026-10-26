@@ -7,16 +7,37 @@ import com.dfavisualizer.model.NFA;
 
 /** Thompson construction for the app's finite-alphabet regular expression syntax. */
 public class RegexParser {
+    private final ConstructionTrace trace;
+    public RegexParser() { this(null); }
+    public RegexParser(ConstructionTrace trace) { this.trace = trace; }
+    private void record(String explanation, NFA nfa) {
+        if (trace != null) trace.nfa(explanation + "\nThis is a fragment, with local state names; combining fragments renumbers states.", nfa);
+    }
     private String regex;
     private int position;
 
     public NFA parse(String regex) {
-        if (regex == null || regex.isEmpty()) return NFA.forEpsilon();
+        if (regex == null || regex.isEmpty()) {
+            NFA empty = NFA.forEpsilon(); record("Empty expression: an ε-edge accepts the empty string.", empty); return empty;
+        }
+        if (regex.length() > 2000) throw new IllegalArgumentException("Expression exceeds the 2,000 character teaching limit. Try a smaller example.");
+        int nesting = 0;
+        boolean escaped = false, inClass = false;
+        for (char c : regex.toCharArray()) {
+            if (escaped) { escaped = false; continue; }
+            if (c == '\\') { escaped = true; continue; }
+            if (c == '[') inClass = true;
+            if (c == ']') inClass = false;
+            if (!inClass && c == '(' && ++nesting > 64)
+                throw new IllegalArgumentException("Use at most 64 nested groups in a teaching example.");
+            if (!inClass && c == ')') nesting--;
+        }
         Pattern.compile(regex);
         this.regex = regex;
         position = 0;
         NFA result = parseExpression();
         if (position != regex.length()) throw error("Unexpected character");
+        record("Completed Thompson NFA for " + regex + ". ε-edges consume no input.", result);
         return result;
     }
 
@@ -25,6 +46,7 @@ public class RegexParser {
         while (position < regex.length() && regex.charAt(position) == '|') {
             position++;
             result = result.union(parseTerm());
+            record("Alternative |: add a new start and accept state, with ε-edges to choose either branch and join their exits.", result);
         }
         return result;
     }
@@ -33,19 +55,29 @@ public class RegexParser {
         NFA result = null;
         while (position < regex.length() && regex.charAt(position) != '|' && regex.charAt(position) != ')') {
             NFA factor = parseFactor();
-            result = result == null ? factor : result.concatenate(factor);
+            if (result == null) result = factor;
+            else {
+                result = result.concatenate(factor);
+                record("Concatenation: connect each left exit to the right entry with an ε-edge. Read the left fragment, then the right.", result);
+            }
         }
-        return result == null ? NFA.forEpsilon() : result;
+        if (result == null) { result = NFA.forEpsilon(); record("Empty branch: an ε-edge allows this branch to consume no input.", result); }
+        return result;
     }
 
     private NFA parseFactor() {
         if (Thread.currentThread().isInterrupted()) throw new java.util.concurrent.CancellationException();
+        int start = position;
         NFA atom = parseAtom();
+        record("Fragment " + regex.substring(start, position) + ": enter at the green arrow and finish at the double ring. A character edge consumes one symbol.", atom);
         if (position < regex.length()) {
             char operator = regex.charAt(position);
             if (operator == '*' || operator == '+' || operator == '?') {
                 position++;
                 atom = operator == '*' ? atom.kleeneStar() : operator == '+' ? atom.oneOrMore() : atom.zeroOrOne();
+                record(operator == '*' ? "Repeat *: add ε-edges to skip the fragment or loop from its exit to its entry. Zero repetitions are allowed."
+                    : operator == '+' ? "Repeat +: concatenate one copy with a starred copy. At least one repetition is required."
+                    : "Optional ?: add an ε-path around the fragment, allowing zero or one occurrence.", atom);
                 if (position < regex.length() && "*+?".indexOf(regex.charAt(position)) >= 0)
                     throw error("Lazy, possessive, and repeated quantifiers are not supported");
             }
