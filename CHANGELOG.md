@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0 — 2026-10-26
+
+- Replay Thompson construction, DFA subset discovery, and minimization decisions with Back/Next graph snapshots.
+- Generate graphs in the background, cancel pending work, and preserve the previous graph if generation fails.
+- Explore a guided suffix exercise and thirteen built-in examples, including parity, binary numbers, and a simplified email pattern.
+- Find syntax help and a dismissible getting-started guide in the desktop app.
+- Correct partition refinement and dead-state completion edge cases.
+- Improve the educational website with mobile examples, clearer installation guidance, and real construction screenshots.
+- Add the automaton logo and favicon, and remove unused screenshots.
+- Automatically create release tags, bundled JAR downloads, SHA-256 checksums, and launch instructions from the project version.
+
 ## 1.1.0 — 2026-10-23
 
 - Guided learning with ε-NFA simulation, exact DFA subset mappings, and minimization explanations.
