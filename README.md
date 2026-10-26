@@ -42,3 +42,4 @@ Supported syntax includes `|`, `*`, `+`, `?`, groups, character classes, and `.`
 - [Contributing](CONTRIBUTING.md) · [Security reports](SECURITY.md)
 - [Project website and local preview](website/README.md)
 - [Repository and GitHub Pages setup](.github/REPOSITORY_SETUP.md)
+- [MIT License](LICENSE)
